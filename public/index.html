@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DX Trunking Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .status-scheduled { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+        .status-loading { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .status-departed { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+        .status-in-transit { background: #eff6ff; color: #1d4ed8; border-color: #60a5fa; }
+        .status-arrived { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+        .status-docked { background: #cffafe; color: #0e7490; border-color: #67e8f9; }
+        .status-tipping { background: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
+        .status-complete { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .status-delayed { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+        .status-cancelled { background: #fef2f2; color: #991b1b; border-color: #fecaca; text-decoration: line-through; }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .table-container { max-height: calc(100vh - 280px); overflow-y: auto; }
+        thead th { position: sticky; top: 0; z-index: 10; }
+        .stat-card { transition: all 0.2s; cursor: pointer; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0099cc; }
+        .hub-card { transition: all 0.2s; cursor: pointer; }
+        .hub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0099cc; }
+        .tab-btn { transition: all 0.2s; }
+        .tab-btn.active { background: #0099cc; color: white; }
+        .tab-btn:not(.active):hover { background: #e0f4fc; }
+        .dx-header { background: linear-gradient(135deg, #0099cc 0%, #007399 100%); }
+        .modal-overlay { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+        .filter-btn { transition: all 0.2s; }
+        .filter-btn.active { background: #0099cc; color: white; }
+        .direction-inbound { background: #d1fae5; color: #065f46; }
+        .direction-outbound { background: #fee2e2; color: #991b1b; }
+        .direction-transfer { background: #dbeafe; color: #1e40af; }
+        .sortable { cursor: pointer; user-select: none; }
+        .sortable:hover { background: #e2e8f0 !important; }
+        .refresh-indicator { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="dx-header px-6 py-8 text-center">
+                <div class="w-20 h-20 bg-white rounded-lg mx-auto mb-4 flex items-center justify-center">
+                    <span class="text-3xl font-bold text-[#0099cc]">DX</span>
+                </div>
+                <h1 class="text-2xl font-bold text-white">Trunking Management System</h1>
+                <p class="text-cyan-200 mt-1">Real-Time Trunking Operations</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" id="loginUsername" placeholder="Enter username" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label><input type="password" id="loginPassword" placeholder="Enter password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <button onclick="login()" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399]">Sign In</button>
+                <p id="loginError" class="text-red-600 text-sm text-center hidden"></p>
+                <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 mt-4"><p class="font-medium mb-1">Demo: admin / admin123</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <header class="dx-header text-white shadow-lg sticky top-0 z-40">
+            <div class="px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 bg-white rounded flex items-center justify-center">
+                            <span class="text-lg font-bold text-[#0099cc]">DX</span>
+                        </div>
+                        <div><h1 class="text-lg font-bold tracking-tight">Trunking Management System</h1><p class="text-xs text-cyan-200">Real-Time Operations</p></div>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <div class="hidden md:flex items-center gap-2 text-sm">
+                            <i data-lucide="clock" class="w-4 h-4 text-cyan-200"></i><span id="currentTime" class="font-mono"></span>
+                            <span class="text-cyan-300">|</span><span id="currentDate"></span>
+                            <span class="text-cyan-300">|</span>
+                            <button onclick="refreshData()" id="refreshBtn" class="flex items-center gap-1 hover:text-cyan-200"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                            <span id="lastUpdate" class="text-xs text-cyan-300"></span>
+                        </div>
+                        <div class="flex items-center gap-3 pl-4 border-l border-white/20">
+                            <div class="text-right hidden sm:block"><p id="displayUsername" class="text-sm font-medium"></p><p id="displayRole" class="text-xs text-cyan-200"></p></div>
+                            <button onclick="logout()" class="px-3 py-1.5 hover:bg-white/10 rounded-lg text-sm">Logout</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="px-4 py-2 bg-black/20 flex items-center gap-6 overflow-x-auto">
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Total:</span><span id="statTotal" class="font-semibold">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Inbound:</span><span id="statInbound" class="font-semibold text-emerald-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Outbound:</span><span id="statOutbound" class="font-semibold text-orange-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Transfer:</span><span id="statTransfer" class="font-semibold text-blue-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><i data-lucide="truck" class="w-4 h-4 text-blue-300"></i><span class="text-cyan-200">In Transit:</span><span id="statInTransit" class="font-semibold text-blue-300">0</span></div>
+                <div id="addTrunkBtnContainer" class="hidden ml-auto"><button onclick="openAddTrunkModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Trunk</button></div>
+            </div>
+        </header>
+
+        <div class="bg-white border-b border-slate-200 px-4">
+            <div class="flex items-center gap-1 overflow-x-auto py-2">
+                <button onclick="showView('dashboard')" class="tab-btn active px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="dashboard"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard</button>
+                <button onclick="showView('live-board')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="live-board"><i data-lucide="monitor" class="w-4 h-4"></i>Live Board</button>
+                <button onclick="showView('schedule')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="schedule"><i data-lucide="calendar" class="w-4 h-4"></i>Schedule</button>
+                <button onclick="showView('depot-departure')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="depot-departure"><i data-lucide="log-out" class="w-4 h-4"></i>Depot Departure</button>
+                <button onclick="showView('hub-arrival')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="hub-arrival"><i data-lucide="log-in" class="w-4 h-4"></i>Hub Arrival</button>
+                <button onclick="showView('hub-operations')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="hub-operations"><i data-lucide="warehouse" class="w-4 h-4"></i>Hub Operations</button>
+                <button onclick="showView('audit-log')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2" data-view="audit-log"><i data-lucide="file-text" class="w-4 h-4"></i>Audit Log</button>
+                <button onclick="showView('users')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-admin-only" data-view="users"><i data-lucide="users" class="w-4 h-4"></i>Users</button>
+            </div>
+        </div>
+
+        <main class="p-4">
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="view-panel">
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('scheduled')"><i data-lucide="calendar" class="w-5 h-5 text-slate-400 mb-2"></i><p class="text-2xl font-bold text-slate-800" id="dashStatScheduled">0</p><p class="text-xs text-slate-500">Scheduled</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('loading')"><i data-lucide="package" class="w-5 h-5 text-amber-500 mb-2"></i><p class="text-2xl font-bold text-amber-600" id="dashStatLoading">0</p><p class="text-xs text-slate-500">Loading</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('departed')"><i data-lucide="log-out" class="w-5 h-5 text-blue-500 mb-2"></i><p class="text-2xl font-bold text-blue-600" id="dashStatDeparted">0</p><p class="text-xs text-slate-500">Departed</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('in-transit')"><i data-lucide="truck" class="w-5 h-5 text-indigo-500 mb-2"></i><p class="text-2xl font-bold text-indigo-600" id="dashStatInTransit">0</p><p class="text-xs text-slate-500">In Transit</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('arrived')"><i data-lucide="log-in" class="w-5 h-5 text-teal-500 mb-2"></i><p class="text-2xl font-bold text-teal-600" id="dashStatArrived">0</p><p class="text-xs text-slate-500">Arrived</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('complete')"><i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500 mb-2"></i><p class="text-2xl font-bold text-emerald-600" id="dashStatComplete">0</p><p class="text-xs text-slate-500">Complete</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-red-200 shadow-sm bg-red-50" onclick="filterByStatus('delayed')"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-500 mb-2"></i><p class="text-2xl font-bold text-red-600" id="dashStatDelayed">0</p><p class="text-xs text-red-600">Delayed</p></div>
+                    <div class="stat-card bg-white rounded-xl p-4 border border-slate-200 shadow-sm" onclick="filterByStatus('cancelled')"><i data-lucide="x-circle" class="w-5 h-5 text-slate-400 mb-2"></i><p class="text-2xl font-bold text-slate-500" id="dashStatCancelled">0</p><p class="text-xs text-slate-500">Cancelled</p></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" id="hubCards"></div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="activity" class="w-5 h-5 text-slate-600"></i>Recent Activity</h3></div><div class="p-4 max-h-64 overflow-y-auto" id="recentActivity"></div></div>
+            </div>
+
+            <!-- Live Board View -->
+            <div id="view-live-board" class="view-panel hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div class="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                        <h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="monitor" class="w-5 h-5"></i>Live Trunk Board <span class="text-slate-400 font-normal text-sm" id="liveBoardCount"></span></h3>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <input type="text" id="liveBoardSearch" placeholder="Search..." oninput="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm w-32">
+                            <select id="liveBoardHubFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Hubs</option></select>
+                            <select id="liveBoardStatusFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Statuses</option></select>
+                            <select id="liveBoardDirectionFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Directions</option><option value="INBOUND">Inbound</option><option value="OUTBOUND">Outbound</option><option value="TRANSFER">Transfer</option></select>
+                            <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="hideCancelled" onchange="renderLiveBoard()" checked class="rounded">Hide Cancelled</label>
+                        </div>
+                    </div>
+                    <div class="table-container overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('trunk_id')">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('route_ref')">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('status')">Status</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('direction')">Direction</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('contractor')">Contractor</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('origin')">Origin</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('destination')">Destination</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('scheduled_dep')">Sched Dep</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 sortable" onclick="sortBy('scheduled_arr')">ETA</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50 col-actions">Actions</th>
+                    </tr></thead><tbody id="liveBoardBody"></tbody></table></div>
+                </div>
+            </div>
+
+            <!-- Schedule View -->
+            <div id="view-schedule" class="view-panel hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="calendar" class="w-5 h-5"></i>Today's Schedule <span class="text-slate-400 font-normal text-sm" id="scheduleCount"></span></h3></div>
+                    <div class="table-container overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Direction</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Origin</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Destination</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Contractor</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Sched Dep</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">ETA</th>
+                    </tr></thead><tbody id="scheduleBody"></tbody></table></div>
+                </div>
+            </div>
+
+            <!-- Depot Departure View -->
+            <div id="view-depot-departure" class="view-panel hidden">
+                <div id="depotContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-[#e0f4fc]"><h3 class="font-semibold text-[#007399] flex items-center gap-2"><i data-lucide="log-out" class="w-5 h-5"></i>Log Departure</h3></div><div class="p-4 space-y-4">
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="depTrunkSelect" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
+                        <div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-slate-700 mb-1">Vehicle</label><input type="text" id="depVehicleReg" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div><div><label class="block text-sm font-medium text-slate-700 mb-1">Trailer</label><input type="text" id="depTrailer" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div></div>
+                        <div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-slate-700 mb-1">Driver</label><input type="text" id="depDriverName" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div><div><label class="block text-sm font-medium text-slate-700 mb-1">Fill %</label><input type="number" id="depFill" min="0" max="100" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div></div>
+                        <div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-slate-700 mb-1">Seal</label><input type="text" id="depSeal" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div><div><label class="block text-sm font-medium text-slate-700 mb-1">Time</label><input type="time" id="depTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div></div>
+                        <button onclick="logDeparture()" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399]">Log Departure</button>
+                    </div></div></div>
+                    <div class="lg:col-span-2"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800">Pending Departures <span class="text-slate-400 font-normal text-sm" id="pendingDepCount"></span></h3></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Contractor</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Sched Dep</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th>
+                    </tr></thead><tbody id="pendingDeparturesBody"></tbody></table></div></div></div>
+                </div>
+            </div>
+
+            <!-- Hub Arrival View -->
+            <div id="view-hub-arrival" class="view-panel hidden">
+                <div id="arrivalContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-teal-50"><h3 class="font-semibold text-teal-800 flex items-center gap-2"><i data-lucide="log-in" class="w-5 h-5"></i>Log Arrival</h3></div><div class="p-4 space-y-4">
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="arrTrunkSelect" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Gate Time</label><input type="time" id="arrGateTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Seal</label><input type="text" id="arrSealVerify" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Bay</label><select id="arrBay" class="w-full px-3 py-2 border border-slate-200 rounded-lg"><option value="">-- Select --</option><option>Bay 1</option><option>Bay 2</option><option>Bay 3</option><option>Bay 4</option><option>Bay 5</option><option>Bay 6</option><option>YARD</option></select></div>
+                        <button onclick="logArrival()" class="w-full py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">Log Arrival</button>
+                    </div></div></div>
+                    <div class="lg:col-span-2"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between"><h3 class="font-semibold text-slate-800">Expected Arrivals <span class="text-slate-400 font-normal text-sm" id="expectedArrCount"></span></h3><select id="arrivalHubFilter" onchange="renderHubArrival()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Hubs</option></select></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Origin</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">To</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Departed</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">ETA</th>
+                    </tr></thead><tbody id="expectedArrivalsBody"></tbody></table></div></div></div>
+                </div>
+            </div>
+
+            <!-- Hub Operations View -->
+            <div id="view-hub-operations" class="view-panel hidden">
+                <div id="hubopsContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-purple-50"><h3 class="font-semibold text-purple-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-5 h-5"></i>Update Operations</h3></div><div class="p-4 space-y-4">
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="opsTrunkSelect" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Dock Time</label><input type="time" id="opsDockTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Tip Start</label><input type="time" id="opsTipStart" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Tip Complete</label><input type="time" id="opsTipComplete" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                        <button onclick="updateOperations()" class="w-full py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700">Update</button>
+                    </div></div></div>
+                    <div class="lg:col-span-2"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between"><h3 class="font-semibold text-slate-800">Docked Trailers</h3><select id="opsHubFilter" onchange="renderHubOperations()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Hubs</option></select></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Bay</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Hub</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Origin</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Arrived</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th>
+                    </tr></thead><tbody id="dockedTrailersBody"></tbody></table></div></div></div>
+                </div>
+            </div>
+
+            <!-- Audit Log View -->
+            <div id="view-audit-log" class="view-panel hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5"></i>Audit Log</h3></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200"><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Time</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">User</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Action</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Details</th></tr></thead><tbody id="auditLogBody"></tbody></table></div></div>
+            </div>
+
+            <!-- Users View -->
+            <div id="view-users" class="view-panel hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i>Users</h3></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200"><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Username</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Name</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Role</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Location</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Actions</th></tr></thead><tbody id="usersBody"></tbody></table></div></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg hidden slide-in flex items-center gap-3 z-50"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-400" id="toastIcon"></i><span id="toastMessage"></span></div>
+
+    <script>
+        // Global state
+        let currentUser = null;
+        let movements = [];
+        let auditLog = [];
+        let users = [];
+        let sortColumn = 'scheduled_dep';
+        let sortDirection = 'asc';
+        let refreshInterval = null;
+        
+        const hubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
+        const rolePermissions = { 'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false }, 'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false }, 'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true } };
+        const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'admin': 'Admin' };
+        function getPermissions() { return currentUser ? rolePermissions[currentUser.role] || rolePermissions['viewer'] : rolePermissions['viewer']; }
+
+        // API helper
+        async function api(endpoint, options = {}) {
+            const url = `/api${endpoint}`;
+            const config = {
+                headers: { 'Content-Type': 'application/json', 'X-User-Name': currentUser?.fullName || 'System' },
+                ...options
+            };
+            if (config.body && typeof config.body === 'object') {
+                config.body = JSON.stringify(config.body);
+            }
+            const response = await fetch(url, config);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                throw new Error(error.error || 'Request failed');
+            }
+            return response.json();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+            updateClock();
+            setInterval(updateClock, 1000);
+            populateFilters();
+        });
+
+        function updateClock() {
+            document.getElementById('currentTime').textContent = new Date().toLocaleTimeString('en-GB');
+            document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+        }
+
+        function populateFilters() {
+            const hubOpts = '<option value="">All Hubs</option>' + hubs.map(h => `<option value="${h}">${h}</option>`).join('');
+            document.getElementById('liveBoardHubFilter').innerHTML = hubOpts;
+            document.getElementById('arrivalHubFilter').innerHTML = hubOpts;
+            document.getElementById('opsHubFilter').innerHTML = hubOpts;
+            document.getElementById('liveBoardStatusFilter').innerHTML = '<option value="">All Statuses</option><option value="scheduled">Scheduled</option><option value="loading">Loading</option><option value="departed">Departed</option><option value="in-transit">In Transit</option><option value="arrived">Arrived</option><option value="complete">Complete</option><option value="delayed">Delayed</option><option value="cancelled">Cancelled</option>';
+        }
+
+        // Auth
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const user = await api('/auth/login', {
+                    method: 'POST',
+                    body: { username, password }
+                });
+                
+                currentUser = user;
+                document.getElementById('loginError').classList.add('hidden');
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('displayUsername').textContent = currentUser.fullName;
+                document.getElementById('displayRole').textContent = roleLabels[currentUser.role];
+                
+                applyRolePermissions();
+                await refreshData();
+                
+                // Auto-refresh every 30 seconds
+                refreshInterval = setInterval(refreshData, 30000);
+                
+                lucide.createIcons();
+            } catch (err) {
+                document.getElementById('loginError').textContent = err.message;
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            currentUser = null;
+            movements = [];
+        }
+
+        function applyRolePermissions() {
+            const perms = getPermissions();
+            document.getElementById('addTrunkBtnContainer').classList.toggle('hidden', !perms.canManageTrunks);
+            document.querySelectorAll('.tab-admin-only').forEach(el => el.classList.toggle('hidden', !perms.canManageUsers));
+            document.querySelectorAll('.col-actions').forEach(el => el.classList.toggle('hidden', !perms.canManageTrunks));
+        }
+
+        // Data loading
+        async function refreshData() {
+            const btn = document.getElementById('refreshBtn');
+            btn.querySelector('i').classList.add('refresh-indicator');
+            
+            try {
+                movements = await api('/movements');
+                auditLog = await api('/audit?limit=50');
+                
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB');
+                renderAll();
+            } catch (err) {
+                console.error('Refresh error:', err);
+                showToast('Failed to refresh data', 'error');
+            } finally {
+                btn.querySelector('i').classList.remove('refresh-indicator');
+            }
+        }
+
+        function renderAll() {
+            updateStats();
+            updateDashboard();
+            renderLiveBoard();
+            renderSchedule();
+            renderDepotDeparture();
+            renderHubArrival();
+            renderHubOperations();
+            renderAuditLog();
+            lucide.createIcons();
+        }
+
+        function updateStats() {
+            const active = movements.filter(t => t.status !== 'cancelled');
+            document.getElementById('statTotal').textContent = active.length;
+            document.getElementById('statInbound').textContent = active.filter(t => t.direction === 'INBOUND').length;
+            document.getElementById('statOutbound').textContent = active.filter(t => t.direction === 'OUTBOUND').length;
+            document.getElementById('statTransfer').textContent = active.filter(t => t.direction === 'TRANSFER').length;
+            document.getElementById('statInTransit').textContent = active.filter(t => ['departed', 'in-transit'].includes(t.status)).length;
+        }
+
+        function updateDashboard() {
+            const active = movements.filter(t => t.status !== 'cancelled');
+            document.getElementById('dashStatScheduled').textContent = active.filter(t => t.status === 'scheduled').length;
+            document.getElementById('dashStatLoading').textContent = active.filter(t => t.status === 'loading').length;
+            document.getElementById('dashStatDeparted').textContent = active.filter(t => t.status === 'departed').length;
+            document.getElementById('dashStatInTransit').textContent = active.filter(t => t.status === 'in-transit').length;
+            document.getElementById('dashStatArrived').textContent = active.filter(t => t.status === 'arrived').length;
+            document.getElementById('dashStatComplete').textContent = active.filter(t => ['docked', 'tipping', 'complete'].includes(t.status)).length;
+            document.getElementById('dashStatDelayed').textContent = active.filter(t => t.status === 'delayed').length;
+            document.getElementById('dashStatCancelled').textContent = movements.filter(t => t.status === 'cancelled').length;
+            
+            // Hub cards
+            const hubStats = {}; hubs.forEach(h => hubStats[h] = { total: 0, inTransit: 0, arrived: 0, delayed: 0 });
+            active.forEach(t => { 
+                if (hubStats[t.destination]) { 
+                    hubStats[t.destination].total++; 
+                    if (['departed', 'in-transit'].includes(t.status)) hubStats[t.destination].inTransit++; 
+                    if (['arrived', 'docked', 'complete'].includes(t.status)) hubStats[t.destination].arrived++; 
+                    if (t.status === 'delayed') hubStats[t.destination].delayed++; 
+                } 
+            });
+            document.getElementById('hubCards').innerHTML = hubs.map(hub => { 
+                const s = hubStats[hub]; 
+                return `<div class="hub-card bg-white rounded-xl border border-slate-200 shadow-sm p-4" onclick="filterByHub('${hub}')"><div class="flex items-center justify-between mb-3"><h4 class="font-semibold text-slate-800">${hub}</h4><span class="text-xs bg-slate-100 px-2 py-0.5 rounded">${s.total} trunks</span></div><div class="grid grid-cols-2 gap-2 text-sm"><div class="bg-slate-50 rounded p-2"><p class="text-slate-500 text-xs">Scheduled</p><p class="font-bold">${s.total - s.inTransit - s.arrived}</p></div><div class="bg-blue-50 rounded p-2"><p class="text-blue-600 text-xs">In Transit</p><p class="font-bold text-blue-700">${s.inTransit}</p></div><div class="bg-emerald-50 rounded p-2"><p class="text-emerald-600 text-xs">Arrived</p><p class="font-bold text-emerald-700">${s.arrived}</p></div><div class="bg-red-50 rounded p-2"><p class="text-red-600 text-xs">Delayed</p><p class="font-bold text-red-700">${s.delayed}</p></div></div></div>`; 
+            }).join('');
+            
+            // Recent activity
+            document.getElementById('recentActivity').innerHTML = auditLog.slice(0, 10).map(log => `<div class="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0"><div class="w-8 h-8 bg-[#e0f4fc] rounded-full flex items-center justify-center flex-shrink-0"><i data-lucide="activity" class="w-4 h-4 text-[#0099cc]"></i></div><div class="flex-1"><p class="text-sm"><strong>${log.action}</strong> ${log.details || ''}</p><p class="text-xs text-slate-500">${log.user_name} • ${new Date(log.created_at).toLocaleTimeString('en-GB')}</p></div></div>`).join('') || '<p class="text-slate-500 text-sm text-center py-4">No recent activity</p>';
+        }
+
+        function sortBy(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderLiveBoard();
+        }
+
+        function renderLiveBoard() {
+            const search = document.getElementById('liveBoardSearch')?.value.toLowerCase() || '';
+            const hub = document.getElementById('liveBoardHubFilter')?.value || '';
+            const status = document.getElementById('liveBoardStatusFilter')?.value || '';
+            const direction = document.getElementById('liveBoardDirectionFilter')?.value || '';
+            const hideCancelled = document.getElementById('hideCancelled')?.checked;
+            const perms = getPermissions();
+            
+            let filtered = movements.filter(t => {
+                if (hideCancelled && t.status === 'cancelled') return false;
+                if (search && !Object.values(t).some(v => String(v).toLowerCase().includes(search))) return false;
+                if (hub && t.destination !== hub) return false;
+                if (status && t.status !== status) return false;
+                if (direction && t.direction !== direction) return false;
+                return true;
+            });
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let valA = a[sortColumn] || '';
+                let valB = b[sortColumn] || '';
+                if (sortColumn.includes('dep') || sortColumn.includes('arr')) {
+                    valA = valA || '99:99';
+                    valB = valB || '99:99';
+                }
+                if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            document.getElementById('liveBoardCount').textContent = `(${filtered.length})`;
+            document.getElementById('liveBoardBody').innerHTML = filtered.map(t => `<tr class="border-b border-slate-100 hover:bg-slate-50 ${t.status === 'cancelled' ? 'opacity-50' : ''}"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td><td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded direction-${(t.direction || '').toLowerCase()}">${t.direction || ''}</span></td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2">${t.destination}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td><td class="px-3 py-2 col-actions ${perms.canManageTrunks ? '' : 'hidden'}">${t.status !== 'cancelled' && ['scheduled', 'loading'].includes(t.status) ? `<button onclick="cancelTrunk(${t.id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200">Cancel</button>` : '—'}</td></tr>`).join('');
+        }
+
+        function renderSchedule() {
+            const sorted = [...movements].sort((a, b) => (a.scheduled_dep || '').localeCompare(b.scheduled_dep || ''));
+            document.getElementById('scheduleCount').textContent = `(${sorted.length})`;
+            document.getElementById('scheduleBody').innerHTML = sorted.map(t => `<tr class="border-b border-slate-100 hover:bg-slate-50 ${t.status === 'cancelled' ? 'opacity-50' : ''}"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td><td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded direction-${(t.direction || '').toLowerCase()}">${t.direction || ''}</span></td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2">${t.destination}</td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td></tr>`).join('');
+        }
+
+        function renderDepotDeparture() {
+            const scheduled = movements.filter(t => ['scheduled', 'loading'].includes(t.status)).sort((a, b) => (a.scheduled_dep || '').localeCompare(b.scheduled_dep || ''));
+            document.getElementById('pendingDepCount').textContent = `(${scheduled.length})`;
+            document.getElementById('depTrunkSelect').innerHTML = '<option value="">-- Select --</option>' + scheduled.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) ${t.origin}→${t.destination}</option>`).join('');
+            document.getElementById('pendingDeparturesBody').innerHTML = scheduled.slice(0, 100).map(t => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2">${t.origin} → ${t.destination}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td></tr>`).join('');
+            document.getElementById('depTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+        }
+
+        function renderHubArrival() {
+            const hubFilter = document.getElementById('arrivalHubFilter')?.value || '';
+            let inTransit = movements.filter(t => ['departed', 'in-transit'].includes(t.status));
+            if (hubFilter) inTransit = inTransit.filter(t => t.destination === hubFilter);
+            inTransit.sort((a, b) => (a.scheduled_arr || '').localeCompare(b.scheduled_arr || ''));
+            
+            document.getElementById('expectedArrCount').textContent = `(${inTransit.length})`;
+            document.getElementById('arrTrunkSelect').innerHTML = '<option value="">-- Select --</option>' + inTransit.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) ${t.origin}→${t.destination}</option>`).join('');
+            document.getElementById('expectedArrivalsBody').innerHTML = inTransit.map(t => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2 font-medium">${t.destination}</td><td class="px-3 py-2 font-mono">${t.actual_dep || '—'}</td><td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td></tr>`).join('');
+            document.getElementById('arrGateTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+        }
+
+        function renderHubOperations() {
+            const hubFilter = document.getElementById('opsHubFilter')?.value || '';
+            let docked = movements.filter(t => ['arrived', 'docked', 'tipping'].includes(t.status));
+            if (hubFilter) docked = docked.filter(t => t.destination === hubFilter);
+            
+            document.getElementById('opsTrunkSelect').innerHTML = '<option value="">-- Select --</option>' + docked.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) Bay ${t.bay || '?'}</option>`).join('');
+            document.getElementById('dockedTrailersBody').innerHTML = docked.map(t => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2 font-bold">${t.bay || '—'}</td><td class="px-3 py-2 font-medium">${t.destination}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2 font-mono">${t.gate_arrival || '—'}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td></tr>`).join('');
+        }
+
+        function renderAuditLog() {
+            document.getElementById('auditLogBody').innerHTML = auditLog.map(l => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono text-xs">${new Date(l.created_at).toLocaleString('en-GB')}</td><td class="px-3 py-2">${l.user_name}</td><td class="px-3 py-2 font-medium">${l.action}</td><td class="px-3 py-2">${l.details || ''}</td></tr>`).join('') || '<tr><td colspan="4" class="text-center py-8 text-slate-500">No audit entries</td></tr>';
+        }
+
+        // Actions
+        async function logDeparture() {
+            const id = document.getElementById('depTrunkSelect').value;
+            if (!id) { showToast('Select trunk', 'error'); return; }
+            
+            try {
+                await api(`/movements/${id}`, {
+                    method: 'PATCH',
+                    body: {
+                        status: 'departed',
+                        vehicle_reg: document.getElementById('depVehicleReg').value,
+                        trailer: document.getElementById('depTrailer').value,
+                        driver: document.getElementById('depDriverName').value,
+                        actual_dep: document.getElementById('depTime').value,
+                        fill_percent: parseInt(document.getElementById('depFill').value) || 0,
+                        seal: document.getElementById('depSeal').value
+                    }
+                });
+                
+                showToast('Departure logged');
+                await refreshData();
+                
+                // Clear form
+                document.getElementById('depVehicleReg').value = '';
+                document.getElementById('depTrailer').value = '';
+                document.getElementById('depDriverName').value = '';
+                document.getElementById('depFill').value = '';
+                document.getElementById('depSeal').value = '';
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function logArrival() {
+            const id = document.getElementById('arrTrunkSelect').value;
+            if (!id) { showToast('Select trunk', 'error'); return; }
+            
+            try {
+                await api(`/movements/${id}`, {
+                    method: 'PATCH',
+                    body: {
+                        status: 'arrived',
+                        gate_arrival: document.getElementById('arrGateTime').value,
+                        bay: document.getElementById('arrBay').value
+                    }
+                });
+                
+                showToast('Arrival logged');
+                await refreshData();
+                
+                document.getElementById('arrSealVerify').value = '';
+                document.getElementById('arrBay').value = '';
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function updateOperations() {
+            const id = document.getElementById('opsTrunkSelect').value;
+            if (!id) { showToast('Select trunk', 'error'); return; }
+            
+            const updates = {};
+            const tipComplete = document.getElementById('opsTipComplete').value;
+            const tipStart = document.getElementById('opsTipStart').value;
+            const dockTime = document.getElementById('opsDockTime').value;
+            
+            if (tipComplete) {
+                updates.status = 'complete';
+                updates.tip_complete = tipComplete;
+            } else if (tipStart) {
+                updates.status = 'tipping';
+                updates.tip_start = tipStart;
+            } else if (dockTime) {
+                updates.status = 'docked';
+                updates.dock_time = dockTime;
+            }
+            
+            if (Object.keys(updates).length === 0) {
+                showToast('Enter at least one time', 'error');
+                return;
+            }
+            
+            try {
+                await api(`/movements/${id}`, { method: 'PATCH', body: updates });
+                showToast('Operations updated');
+                await refreshData();
+                
+                document.getElementById('opsDockTime').value = '';
+                document.getElementById('opsTipStart').value = '';
+                document.getElementById('opsTipComplete').value = '';
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function cancelTrunk(id) {
+            const reason = prompt('Cancellation reason:');
+            if (!reason) return;
+            
+            try {
+                await api(`/movements/${id}`, {
+                    method: 'PATCH',
+                    body: { status: 'cancelled', cancel_reason: reason }
+                });
+                showToast('Trunk cancelled');
+                await refreshData();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        // Navigation
+        function showView(viewName) {
+            document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.view === viewName) btn.classList.add('active');
+            });
+            lucide.createIcons();
+        }
+
+        function filterByStatus(status) {
+            document.getElementById('liveBoardStatusFilter').value = status;
+            showView('live-board');
+            renderLiveBoard();
+        }
+
+        function filterByHub(hub) {
+            document.getElementById('liveBoardHubFilter').value = hub;
+            showView('live-board');
+            renderLiveBoard();
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            document.getElementById('toastIcon').setAttribute('data-lucide', type === 'error' ? 'x-circle' : 'check-circle');
+            document.getElementById('toastIcon').className = `w-5 h-5 ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`;
+            lucide.createIcons();
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+    </script>
+</body>
+</html>

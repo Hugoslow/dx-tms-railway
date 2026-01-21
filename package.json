@@ -1,7 +1,7 @@
 {
   "name": "dx-trunking-management-system",
-  "version": "2.0.0",
-  "description": "DX Trunking Management System - Real-time trunk tracking",
+  "version": "2.1.0",
+  "description": "DX Trunking Management System - Real-time trunk tracking with metrics",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "jsonwebtoken": "^9.0.2",
-    "express-rate-limit": "^7.1.5"
+    "express-rate-limit": "^7.1.5",
+    "exceljs": "^4.4.0"
   },
   "engines": {
     "node": ">=18.0.0"

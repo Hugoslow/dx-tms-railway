@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const ExcelJS = require('exceljs');
 require('dotenv').config();
 
 const app = express();
@@ -680,9 +681,12 @@ app.post('/api/reset-daily', async (req, res) => {
       return res.status(403).json({ error: 'Invalid reset key' });
     }
     
-    // Archive yesterday's movements
+    // Archive old movements - keep for reporting (no longer deleting)
+    // Mark old movements as archived if needed
     await pool.query(
-      `DELETE FROM trunk_movements WHERE movement_date < CURRENT_DATE`
+      `UPDATE trunk_movements SET status = 
+        CASE WHEN status IN ('scheduled', 'loading') THEN 'cancelled' ELSE status END
+       WHERE movement_date < CURRENT_DATE AND status IN ('scheduled', 'loading')`
     );
     
     // Check what's already in today's movements (preserve in-transit)
@@ -758,6 +762,447 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Stats error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ METRICS HELPER FUNCTIONS ============
+
+function timeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const [hours, mins] = timeStr.split(':').map(Number);
+  return hours * 60 + mins;
+}
+
+function calculateVariance(actual, scheduled) {
+  const actualMins = timeToMinutes(actual);
+  const scheduledMins = timeToMinutes(scheduled);
+  if (actualMins === null || scheduledMins === null) return null;
+  return actualMins - scheduledMins;
+}
+
+function calculateMetricsForMovements(movements) {
+  const metrics = {
+    total: 0,
+    departed: 0,
+    arrived: 0,
+    complete: 0,
+    cancelled: 0,
+    depOnTime: 0,
+    depLate: 0,
+    depMinsLost: 0,
+    arrOnTime: 0,
+    arrLate: 0,
+    arrMinsLost: 0,
+    totalTurnaround: 0,
+    turnaroundCount: 0,
+    totalTipDuration: 0,
+    tipCount: 0
+  };
+  
+  movements.forEach(m => {
+    if (m.status === 'cancelled') {
+      metrics.cancelled++;
+      return;
+    }
+    
+    metrics.total++;
+    
+    // Departure metrics
+    if (m.actual_dep) {
+      metrics.departed++;
+      const depVariance = calculateVariance(m.actual_dep, m.scheduled_dep);
+      if (depVariance !== null) {
+        if (depVariance <= 0) {
+          metrics.depOnTime++;
+        } else {
+          metrics.depLate++;
+          metrics.depMinsLost += depVariance;
+        }
+      }
+    }
+    
+    // Arrival metrics
+    if (m.gate_arrival) {
+      metrics.arrived++;
+      const arrVariance = calculateVariance(m.gate_arrival, m.scheduled_arr);
+      if (arrVariance !== null) {
+        if (arrVariance <= 0) {
+          metrics.arrOnTime++;
+        } else {
+          metrics.arrLate++;
+          metrics.arrMinsLost += arrVariance;
+        }
+      }
+    }
+    
+    // Turnaround time (gate arrival to tip complete)
+    if (m.gate_arrival && m.tip_complete) {
+      const turnaround = calculateVariance(m.tip_complete, m.gate_arrival);
+      if (turnaround !== null && turnaround > 0) {
+        metrics.totalTurnaround += turnaround;
+        metrics.turnaroundCount++;
+      }
+    }
+    
+    // Tip duration
+    if (m.tip_start && m.tip_complete) {
+      const tipDuration = calculateVariance(m.tip_complete, m.tip_start);
+      if (tipDuration !== null && tipDuration > 0) {
+        metrics.totalTipDuration += tipDuration;
+        metrics.tipCount++;
+      }
+    }
+    
+    if (['docked', 'tipping', 'complete'].includes(m.status)) {
+      metrics.complete++;
+    }
+  });
+  
+  // Calculate percentages and averages
+  metrics.depOnTimePercent = metrics.departed > 0 ? Math.round((metrics.depOnTime / metrics.departed) * 100) : 0;
+  metrics.arrOnTimePercent = metrics.arrived > 0 ? Math.round((metrics.arrOnTime / metrics.arrived) * 100) : 0;
+  metrics.avgTurnaround = metrics.turnaroundCount > 0 ? Math.round(metrics.totalTurnaround / metrics.turnaroundCount) : 0;
+  metrics.avgTipDuration = metrics.tipCount > 0 ? Math.round(metrics.totalTipDuration / metrics.tipCount) : 0;
+  
+  return metrics;
+}
+
+// ============ LIVE METRICS ENDPOINT ============
+
+app.get('/api/metrics/live', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM trunk_movements WHERE movement_date = CURRENT_DATE`
+    );
+    
+    const movements = result.rows;
+    
+    // Network-wide metrics
+    const networkMetrics = calculateMetricsForMovements(movements);
+    
+    // Hub-by-hub metrics
+    const hubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
+    const hubMetrics = {};
+    
+    hubs.forEach(hub => {
+      const hubMovements = movements.filter(m => m.destination === hub);
+      hubMetrics[hub] = calculateMetricsForMovements(hubMovements);
+    });
+    
+    res.json({
+      date: new Date().toISOString().split('T')[0],
+      network: networkMetrics,
+      hubs: hubMetrics
+    });
+  } catch (err) {
+    console.error('Live metrics error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ HISTORICAL METRICS ENDPOINT ============
+
+app.get('/api/metrics/history', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate, hub } = req.query;
+    
+    let query = `SELECT * FROM trunk_movements WHERE movement_date >= $1 AND movement_date <= $2`;
+    const params = [startDate || new Date().toISOString().split('T')[0], endDate || new Date().toISOString().split('T')[0]];
+    
+    if (hub && hub !== 'all') {
+      query += ` AND destination = $3`;
+      params.push(hub);
+    }
+    
+    const result = await pool.query(query, params);
+    const movements = result.rows;
+    
+    // Group by date
+    const dailyMetrics = {};
+    movements.forEach(m => {
+      const date = m.movement_date.toISOString().split('T')[0];
+      if (!dailyMetrics[date]) {
+        dailyMetrics[date] = [];
+      }
+      dailyMetrics[date].push(m);
+    });
+    
+    // Calculate metrics per day
+    const dailySummary = Object.keys(dailyMetrics).sort().map(date => ({
+      date,
+      ...calculateMetricsForMovements(dailyMetrics[date])
+    }));
+    
+    // Overall period metrics
+    const periodMetrics = calculateMetricsForMovements(movements);
+    
+    res.json({
+      startDate: params[0],
+      endDate: params[1],
+      hub: hub || 'all',
+      period: periodMetrics,
+      daily: dailySummary
+    });
+  } catch (err) {
+    console.error('History metrics error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ AVAILABLE DATES ENDPOINT ============
+
+app.get('/api/metrics/dates', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT movement_date FROM trunk_movements ORDER BY movement_date DESC LIMIT 90`
+    );
+    res.json(result.rows.map(r => r.movement_date.toISOString().split('T')[0]));
+  } catch (err) {
+    console.error('Dates error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ REPORT EXPORT ENDPOINT ============
+
+app.get('/api/report/export', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate, hubs } = req.query;
+    const hubList = hubs ? hubs.split(',') : null;
+    
+    let query = `SELECT * FROM trunk_movements WHERE movement_date >= $1 AND movement_date <= $2`;
+    const params = [startDate, endDate];
+    
+    if (hubList && hubList.length > 0 && !hubList.includes('all')) {
+      query += ` AND destination = ANY($3)`;
+      params.push(hubList);
+    }
+    
+    query += ` ORDER BY movement_date, scheduled_dep`;
+    
+    const result = await pool.query(query, params);
+    const movements = result.rows;
+    
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'DX TMS';
+    workbook.created = new Date();
+    
+    // ============ SUMMARY SHEET ============
+    const summarySheet = workbook.addWorksheet('Summary');
+    
+    // Title
+    summarySheet.mergeCells('A1:I1');
+    summarySheet.getCell('A1').value = 'DX Trunking Performance Report';
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
+    
+    summarySheet.mergeCells('A2:I2');
+    summarySheet.getCell('A2').value = `Period: ${startDate} to ${endDate}`;
+    summarySheet.getCell('A2').alignment = { horizontal: 'center' };
+    
+    // Network summary
+    const networkMetrics = calculateMetricsForMovements(movements);
+    
+    summarySheet.getCell('A4').value = 'Network Summary';
+    summarySheet.getCell('A4').font = { bold: true, size: 14 };
+    
+    const networkData = [
+      ['Total Trunks', networkMetrics.total],
+      ['Departed', networkMetrics.departed],
+      ['Arrived', networkMetrics.arrived],
+      ['Complete', networkMetrics.complete],
+      ['Cancelled', networkMetrics.cancelled],
+      ['', ''],
+      ['Departure On-Time %', `${networkMetrics.depOnTimePercent}%`],
+      ['Departure Minutes Lost', networkMetrics.depMinsLost],
+      ['Arrival On-Time %', `${networkMetrics.arrOnTimePercent}%`],
+      ['Arrival Minutes Lost', networkMetrics.arrMinsLost],
+      ['Avg Turnaround (mins)', networkMetrics.avgTurnaround],
+      ['Avg Tip Duration (mins)', networkMetrics.avgTipDuration]
+    ];
+    
+    networkData.forEach((row, idx) => {
+      summarySheet.getCell(`A${5 + idx}`).value = row[0];
+      summarySheet.getCell(`B${5 + idx}`).value = row[1];
+      summarySheet.getCell(`A${5 + idx}`).font = { bold: row[0] !== '' };
+    });
+    
+    // Hub summary table
+    const hubStartRow = 20;
+    summarySheet.getCell(`A${hubStartRow}`).value = 'Hub Performance';
+    summarySheet.getCell(`A${hubStartRow}`).font = { bold: true, size: 14 };
+    
+    const hubHeaders = ['Hub', 'Total', 'Departed', 'Arrived', 'Complete', 'Dep On-Time %', 'Arr On-Time %', 'Mins Lost (Dep)', 'Mins Lost (Arr)', 'Avg Turnaround'];
+    hubHeaders.forEach((header, idx) => {
+      const cell = summarySheet.getCell(hubStartRow + 1, idx + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+    });
+    
+    const allHubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
+    const displayHubs = hubList && !hubList.includes('all') ? hubList : allHubs;
+    
+    displayHubs.forEach((hub, idx) => {
+      const hubMovements = movements.filter(m => m.destination === hub);
+      const hubM = calculateMetricsForMovements(hubMovements);
+      const rowNum = hubStartRow + 2 + idx;
+      
+      summarySheet.getCell(rowNum, 1).value = hub;
+      summarySheet.getCell(rowNum, 2).value = hubM.total;
+      summarySheet.getCell(rowNum, 3).value = hubM.departed;
+      summarySheet.getCell(rowNum, 4).value = hubM.arrived;
+      summarySheet.getCell(rowNum, 5).value = hubM.complete;
+      summarySheet.getCell(rowNum, 6).value = `${hubM.depOnTimePercent}%`;
+      summarySheet.getCell(rowNum, 7).value = `${hubM.arrOnTimePercent}%`;
+      summarySheet.getCell(rowNum, 8).value = hubM.depMinsLost;
+      summarySheet.getCell(rowNum, 9).value = hubM.arrMinsLost;
+      summarySheet.getCell(rowNum, 10).value = hubM.avgTurnaround;
+      
+      // Color coding for on-time percentages
+      const depCell = summarySheet.getCell(rowNum, 6);
+      const arrCell = summarySheet.getCell(rowNum, 7);
+      
+      [{ cell: depCell, pct: hubM.depOnTimePercent }, { cell: arrCell, pct: hubM.arrOnTimePercent }].forEach(({ cell, pct }) => {
+        if (pct >= 95) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } };
+        } else if (pct >= 90) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } };
+        } else {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } };
+        }
+      });
+    });
+    
+    // Set column widths
+    summarySheet.columns = [
+      { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
+      { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }
+    ];
+    
+    // ============ DETAIL SHEET ============
+    const detailSheet = workbook.addWorksheet('Detail');
+    
+    const detailHeaders = [
+      'Date', 'Trunk ID', 'Route Ref', 'Direction', 'Contractor', 'Origin', 'Destination',
+      'Sched Dep', 'Actual Dep', 'Dep Variance', 'Sched Arr', 'Gate Arrival', 'Arr Variance',
+      'Dock Time', 'Tip Start', 'Tip Complete', 'Tip Duration', 'Turnaround', 'Status'
+    ];
+    
+    detailHeaders.forEach((header, idx) => {
+      const cell = detailSheet.getCell(1, idx + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+    });
+    
+    movements.forEach((m, idx) => {
+      const rowNum = idx + 2;
+      const depVariance = calculateVariance(m.actual_dep, m.scheduled_dep);
+      const arrVariance = calculateVariance(m.gate_arrival, m.scheduled_arr);
+      const tipDuration = calculateVariance(m.tip_complete, m.tip_start);
+      const turnaround = calculateVariance(m.tip_complete, m.gate_arrival);
+      
+      detailSheet.getCell(rowNum, 1).value = m.movement_date.toISOString().split('T')[0];
+      detailSheet.getCell(rowNum, 2).value = m.trunk_id;
+      detailSheet.getCell(rowNum, 3).value = m.route_ref;
+      detailSheet.getCell(rowNum, 4).value = m.direction;
+      detailSheet.getCell(rowNum, 5).value = m.contractor;
+      detailSheet.getCell(rowNum, 6).value = m.origin;
+      detailSheet.getCell(rowNum, 7).value = m.destination;
+      detailSheet.getCell(rowNum, 8).value = m.scheduled_dep;
+      detailSheet.getCell(rowNum, 9).value = m.actual_dep;
+      detailSheet.getCell(rowNum, 10).value = depVariance;
+      detailSheet.getCell(rowNum, 11).value = m.scheduled_arr;
+      detailSheet.getCell(rowNum, 12).value = m.gate_arrival;
+      detailSheet.getCell(rowNum, 13).value = arrVariance;
+      detailSheet.getCell(rowNum, 14).value = m.dock_time;
+      detailSheet.getCell(rowNum, 15).value = m.tip_start;
+      detailSheet.getCell(rowNum, 16).value = m.tip_complete;
+      detailSheet.getCell(rowNum, 17).value = tipDuration;
+      detailSheet.getCell(rowNum, 18).value = turnaround;
+      detailSheet.getCell(rowNum, 19).value = m.status;
+      
+      // Color code variances
+      if (depVariance !== null) {
+        const depCell = detailSheet.getCell(rowNum, 10);
+        depCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: depVariance <= 0 ? 'D1FAE5' : 'FEE2E2' } };
+      }
+      if (arrVariance !== null) {
+        const arrCell = detailSheet.getCell(rowNum, 13);
+        arrCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: arrVariance <= 0 ? 'D1FAE5' : 'FEE2E2' } };
+      }
+    });
+    
+    // Auto-filter
+    detailSheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: movements.length + 1, column: detailHeaders.length }
+    };
+    
+    // Set column widths
+    detailSheet.columns = detailHeaders.map(() => ({ width: 12 }));
+    detailSheet.getColumn(5).width = 15;
+    detailSheet.getColumn(6).width = 15;
+    detailSheet.getColumn(7).width = 18;
+    
+    // ============ DAILY TRENDS SHEET ============
+    if (startDate !== endDate) {
+      const trendsSheet = workbook.addWorksheet('Daily Trends');
+      
+      const trendHeaders = ['Date', 'Total', 'Departed', 'Arrived', 'Complete', 'Dep On-Time %', 'Arr On-Time %', 'Mins Lost'];
+      trendHeaders.forEach((header, idx) => {
+        const cell = trendsSheet.getCell(1, idx + 1);
+        cell.value = header;
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+      });
+      
+      // Group by date
+      const dailyData = {};
+      movements.forEach(m => {
+        const date = m.movement_date.toISOString().split('T')[0];
+        if (!dailyData[date]) dailyData[date] = [];
+        dailyData[date].push(m);
+      });
+      
+      Object.keys(dailyData).sort().forEach((date, idx) => {
+        const dayMetrics = calculateMetricsForMovements(dailyData[date]);
+        const rowNum = idx + 2;
+        
+        trendsSheet.getCell(rowNum, 1).value = date;
+        trendsSheet.getCell(rowNum, 2).value = dayMetrics.total;
+        trendsSheet.getCell(rowNum, 3).value = dayMetrics.departed;
+        trendsSheet.getCell(rowNum, 4).value = dayMetrics.arrived;
+        trendsSheet.getCell(rowNum, 5).value = dayMetrics.complete;
+        trendsSheet.getCell(rowNum, 6).value = `${dayMetrics.depOnTimePercent}%`;
+        trendsSheet.getCell(rowNum, 7).value = `${dayMetrics.arrOnTimePercent}%`;
+        trendsSheet.getCell(rowNum, 8).value = dayMetrics.depMinsLost + dayMetrics.arrMinsLost;
+      });
+      
+      trendsSheet.columns = trendHeaders.map(() => ({ width: 15 }));
+    }
+    
+    // Send file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=TMS_Report_${startDate}_to_${endDate}.xlsx`);
+    
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    // Log export
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Report Export', `Exported report: ${startDate} to ${endDate}`]
+    );
+    
+  } catch (err) {
+    console.error('Report export error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

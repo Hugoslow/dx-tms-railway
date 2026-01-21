@@ -27,19 +27,19 @@
         .table-container { max-height: calc(100vh - 280px); overflow-y: auto; }
         thead th { position: sticky; top: 0; z-index: 10; }
         .stat-card { transition: all 0.2s; cursor: pointer; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0099cc; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0066B3; }
         .hub-card { transition: all 0.2s; cursor: pointer; }
-        .hub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0099cc; }
+        .hub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); border-color: #0066B3; }
         .tab-btn { transition: all 0.2s; }
-        .tab-btn.active { background: #0099cc; color: white; }
-        .tab-btn:not(.active):hover { background: #e0f4fc; }
-        .dx-header { background: linear-gradient(135deg, #0099cc 0%, #007399 100%); }
+        .tab-btn.active { background: #0066B3; color: white; }
+        .tab-btn:not(.active):hover { background: #e0f0ff; }
+        .dx-header { background: linear-gradient(135deg, #00A0E3 0%, #004B87 100%); }
         .modal-overlay { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
         .filter-btn { transition: all 0.2s; }
-        .filter-btn.active { background: #0099cc; color: white; }
-        .direction-inbound { background: #d1fae5; color: #065f46; }
-        .direction-outbound { background: #fee2e2; color: #991b1b; }
-        .direction-transfer { background: #dbeafe; color: #1e40af; }
+        .filter-btn.active { background: #0066B3; color: white; }
+        .direction-inbound { background: #dbeafe; color: #1e40af; }
+        .direction-outbound { background: #ffedd5; color: #c2410c; }
+        .direction-transfer { background: #f3e8ff; color: #7c3aed; }
         .sortable { cursor: pointer; user-select: none; }
         .sortable:hover { background: #e2e8f0 !important; }
         .refresh-indicator { animation: spin 1s linear infinite; }
@@ -56,16 +56,16 @@
     <div id="loginModal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
             <div class="dx-header px-6 py-8 text-center">
-                <div class="w-20 h-20 bg-white rounded-lg mx-auto mb-4 flex items-center justify-center">
-                    <span class="text-3xl font-bold text-[#0099cc]">DX</span>
+                <div class="w-24 h-24 bg-white rounded-lg mx-auto mb-4 flex items-center justify-center p-2">
+                    <img src="/dx-logo.png" alt="DX" class="w-full h-full object-contain">
                 </div>
                 <h1 class="text-2xl font-bold text-white">Trunking Management System</h1>
-                <p class="text-cyan-200 mt-1">Real-Time Trunking Operations</p>
+                <p class="text-blue-200 mt-1">Real-Time Trunking Operations</p>
             </div>
             <div class="p-6 space-y-4">
-                <div><label class="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" id="loginUsername" placeholder="Enter username" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
-                <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label><input type="password" id="loginPassword" placeholder="Enter password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
-                <button onclick="login()" id="loginBtn" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399] disabled:opacity-50 disabled:cursor-not-allowed">Sign In</button>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" id="loginUsername" placeholder="Enter username" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label><input type="password" id="loginPassword" placeholder="Enter password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <button onclick="login()" id="loginBtn" class="w-full py-3 bg-[#0066B3] text-white font-semibold rounded-lg hover:bg-[#004B87] disabled:opacity-50 disabled:cursor-not-allowed">Sign In</button>
                 <p id="loginError" class="text-red-600 text-sm text-center hidden"></p>
             </div>
             <div class="px-6 pb-6">
@@ -227,27 +227,105 @@
         </div>
     </div>
 
+    <!-- Add Trunk Modal -->
+    <div id="addTrunkModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5"></i>Add Trunk Movement</h2>
+                <button onclick="closeAddTrunkModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk ID</label><input type="text" id="newTrunkId" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase" placeholder="e.g. TRK0500"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Route Ref</label><input type="text" id="newRouteRef" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase" placeholder="e.g. NUN 01"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Origin</label>
+                        <select id="newOrigin" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                            <option value="">-- Select --</option>
+                            <option value="NUNEATON HUB 1">Nuneaton Hub 1</option>
+                            <option value="HUB 2 NUNEATON">Hub 2 Nuneaton</option>
+                            <option value="BRACKNELL HUB">Bracknell Hub</option>
+                            <option value="BRISTOL HUB">Bristol Hub</option>
+                            <option value="HAYDOCK HUB">Haydock Hub</option>
+                            <option value="LEEDS HUB">Leeds Hub</option>
+                            <option value="HOLLIES">Hollies</option>
+                            <option value="OTHER">Other (specify)</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Destination</label>
+                        <select id="newDestination" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                            <option value="">-- Select --</option>
+                            <option value="NUNEATON HUB 1">Nuneaton Hub 1</option>
+                            <option value="HUB 2 NUNEATON">Hub 2 Nuneaton</option>
+                            <option value="BRACKNELL HUB">Bracknell Hub</option>
+                            <option value="BRISTOL HUB">Bristol Hub</option>
+                            <option value="HAYDOCK HUB">Haydock Hub</option>
+                            <option value="LEEDS HUB">Leeds Hub</option>
+                            <option value="HOLLIES">Hollies</option>
+                            <option value="OTHER">Other (specify)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="customOriginContainer" class="hidden">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Custom Origin</label>
+                    <input type="text" id="customOrigin" class="w-full px-3 py-2 border border-slate-200 rounded-lg" placeholder="Enter origin name">
+                </div>
+                <div id="customDestinationContainer" class="hidden">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Custom Destination</label>
+                    <input type="text" id="customDestination" class="w-full px-3 py-2 border border-slate-200 rounded-lg" placeholder="Enter destination name">
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Direction</label>
+                        <select id="newDirection" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                            <option value="INBOUND">Inbound</option>
+                            <option value="OUTBOUND">Outbound</option>
+                            <option value="TRANSFER">Transfer</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Sched Dep</label><input type="time" id="newSchedDep" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">ETA</label><input type="time" id="newSchedArr" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Contractor</label><input type="text" id="newContractor" class="w-full px-3 py-2 border border-slate-200 rounded-lg" placeholder="e.g. FTS"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Vehicle Type</label>
+                        <select id="newVehicleType" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                            <option value="ARTIC">Artic</option>
+                            <option value="RIGID">Rigid</option>
+                            <option value="VAN">Van</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeAddTrunkModal()" class="flex-1 py-3 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                    <button onclick="createTrunk()" class="flex-1 py-3 bg-[#0066B3] text-white font-semibold rounded-lg hover:bg-[#004B87]">Add Trunk</button>
+                </div>
+                <p id="addTrunkError" class="text-red-600 text-sm text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
     <!-- Main App -->
     <div id="mainApp" class="hidden">
         <header class="dx-header text-white shadow-lg sticky top-0 z-40">
             <div class="px-4 py-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 bg-white rounded flex items-center justify-center">
-                            <span class="text-lg font-bold text-[#0099cc]">DX</span>
+                        <div class="w-12 h-12 bg-white rounded flex items-center justify-center p-1">
+                            <img src="/DX_logo.png" alt="DX" class="w-full h-full object-contain">
                         </div>
-                        <div><h1 class="text-lg font-bold tracking-tight">Trunking Management System</h1><p class="text-xs text-cyan-200">Real-Time Operations</p></div>
+                        <div><h1 class="text-lg font-bold tracking-tight">Trunking Management System</h1><p class="text-xs text-blue-200">Real-Time Operations</p></div>
                     </div>
                     <div class="flex items-center gap-6">
                         <div class="hidden md:flex items-center gap-2 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-cyan-200"></i><span id="currentTime" class="font-mono"></span>
-                            <span class="text-cyan-300">|</span><span id="currentDate"></span>
-                            <span class="text-cyan-300">|</span>
-                            <button onclick="refreshData()" id="refreshBtn" class="flex items-center gap-1 hover:text-cyan-200" title="Refresh data"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
-                            <span id="lastUpdate" class="text-xs text-cyan-300"></span>
+                            <i data-lucide="clock" class="w-4 h-4 text-blue-200"></i><span id="currentTime" class="font-mono"></span>
+                            <span class="text-blue-300">|</span><span id="currentDate"></span>
+                            <span class="text-blue-300">|</span>
+                            <button onclick="refreshData()" id="refreshBtn" class="flex items-center gap-1 hover:text-blue-200" title="Refresh data"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                            <span id="lastUpdate" class="text-xs text-blue-300"></span>
                         </div>
                         <div class="flex items-center gap-3 pl-4 border-l border-white/20">
-                            <div class="text-right hidden sm:block"><p id="displayUsername" class="text-sm font-medium"></p><p id="displayRole" class="text-xs text-cyan-200"></p></div>
+                            <div class="text-right hidden sm:block"><p id="displayUsername" class="text-sm font-medium"></p><p id="displayRole" class="text-xs text-blue-200"></p></div>
                             <div class="relative">
                                 <button onclick="toggleUserMenu()" class="flex items-center gap-1 px-3 py-1.5 hover:bg-white/10 rounded-lg text-sm"><i data-lucide="user" class="w-4 h-4"></i><i data-lucide="chevron-down" class="w-3 h-3"></i></button>
                                 <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50">
@@ -261,11 +339,11 @@
                 </div>
             </div>
             <div class="px-4 py-2 bg-black/20 flex items-center gap-6 overflow-x-auto">
-                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Total:</span><span id="statTotal" class="font-semibold">0</span></div>
-                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Inbound:</span><span id="statInbound" class="font-semibold text-emerald-300">0</span></div>
-                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Outbound:</span><span id="statOutbound" class="font-semibold text-orange-300">0</span></div>
-                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-cyan-200">Transfer:</span><span id="statTransfer" class="font-semibold text-blue-300">0</span></div>
-                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><i data-lucide="truck" class="w-4 h-4 text-blue-300"></i><span class="text-cyan-200">In Transit:</span><span id="statInTransit" class="font-semibold text-blue-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Total:</span><span id="statTotal" class="font-semibold">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Inbound:</span><span id="statInbound" class="font-semibold text-blue-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Outbound:</span><span id="statOutbound" class="font-semibold text-orange-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Transfer:</span><span id="statTransfer" class="font-semibold text-purple-300">0</span></div>
+                <div class="flex items-center gap-2 text-sm whitespace-nowrap"><i data-lucide="truck" class="w-4 h-4 text-blue-300"></i><span class="text-blue-200">In Transit:</span><span id="statInTransit" class="font-semibold text-blue-300">0</span></div>
                 <div id="addTrunkBtnContainer" class="hidden ml-auto"><button onclick="openAddTrunkModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Trunk</button></div>
             </div>
         </header>
@@ -1271,6 +1349,88 @@
             } catch (err) {
                 document.getElementById('addUserError').textContent = err.message;
                 document.getElementById('addUserError').classList.remove('hidden');
+            }
+        }
+
+        // ============ ADD TRUNK MODAL ============
+        function openAddTrunkModal() {
+            document.getElementById('addTrunkModal').classList.remove('hidden');
+            document.getElementById('newTrunkId').value = '';
+            document.getElementById('newRouteRef').value = '';
+            document.getElementById('newOrigin').value = '';
+            document.getElementById('newDestination').value = '';
+            document.getElementById('newDirection').value = 'INBOUND';
+            document.getElementById('newSchedDep').value = '';
+            document.getElementById('newSchedArr').value = '';
+            document.getElementById('newContractor').value = '';
+            document.getElementById('newVehicleType').value = 'ARTIC';
+            document.getElementById('customOriginContainer').classList.add('hidden');
+            document.getElementById('customDestinationContainer').classList.add('hidden');
+            document.getElementById('addTrunkError').classList.add('hidden');
+            
+            // Add change listeners for custom origin/destination
+            document.getElementById('newOrigin').onchange = function() {
+                document.getElementById('customOriginContainer').classList.toggle('hidden', this.value !== 'OTHER');
+            };
+            document.getElementById('newDestination').onchange = function() {
+                document.getElementById('customDestinationContainer').classList.toggle('hidden', this.value !== 'OTHER');
+            };
+            
+            lucide.createIcons();
+        }
+
+        function closeAddTrunkModal() {
+            document.getElementById('addTrunkModal').classList.add('hidden');
+        }
+
+        async function createTrunk() {
+            const trunkId = document.getElementById('newTrunkId').value.trim().toUpperCase();
+            const routeRef = document.getElementById('newRouteRef').value.trim().toUpperCase();
+            let origin = document.getElementById('newOrigin').value;
+            let destination = document.getElementById('newDestination').value;
+            const direction = document.getElementById('newDirection').value;
+            const schedDep = document.getElementById('newSchedDep').value;
+            const schedArr = document.getElementById('newSchedArr').value;
+            const contractor = document.getElementById('newContractor').value.trim().toUpperCase();
+            const vehicleType = document.getElementById('newVehicleType').value;
+            
+            // Handle custom origin/destination
+            if (origin === 'OTHER') {
+                origin = document.getElementById('customOrigin').value.trim().toUpperCase();
+            }
+            if (destination === 'OTHER') {
+                destination = document.getElementById('customDestination').value.trim().toUpperCase();
+            }
+            
+            // Validation
+            if (!trunkId || !origin || !destination) {
+                document.getElementById('addTrunkError').textContent = 'Trunk ID, Origin and Destination are required';
+                document.getElementById('addTrunkError').classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                await api('/movements', {
+                    method: 'POST',
+                    body: {
+                        trunk_id: trunkId,
+                        route_ref: routeRef,
+                        origin,
+                        destination,
+                        direction,
+                        scheduled_dep: schedDep,
+                        scheduled_arr: schedArr,
+                        contractor,
+                        vehicle_type: vehicleType
+                    }
+                });
+                
+                closeAddTrunkModal();
+                showToast(`Trunk ${trunkId} added successfully`);
+                await refreshData();
+            } catch (err) {
+                document.getElementById('addTrunkError').textContent = err.message;
+                document.getElementById('addTrunkError').classList.remove('hidden');
             }
         }
 

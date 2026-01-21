@@ -44,6 +44,11 @@
         .sortable:hover { background: #e2e8f0 !important; }
         .refresh-indicator { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .password-strength { height: 4px; transition: all 0.3s; }
+        .strength-weak { background: #ef4444; width: 25%; }
+        .strength-fair { background: #f97316; width: 50%; }
+        .strength-good { background: #eab308; width: 75%; }
+        .strength-strong { background: #22c55e; width: 100%; }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -58,11 +63,115 @@
                 <p class="text-cyan-200 mt-1">Real-Time Trunking Operations</p>
             </div>
             <div class="p-6 space-y-4">
-                <div><label class="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" id="loginUsername" placeholder="Enter username" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
-                <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label><input type="password" id="loginPassword" placeholder="Enter password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
-                <button onclick="login()" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399]">Sign In</button>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" id="loginUsername" placeholder="Enter username" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Password</label><input type="password" id="loginPassword" placeholder="Enter password" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" onkeypress="if(event.key==='Enter')login()"></div>
+                <button onclick="login()" id="loginBtn" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399] disabled:opacity-50 disabled:cursor-not-allowed">Sign In</button>
                 <p id="loginError" class="text-red-600 text-sm text-center hidden"></p>
-                <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 mt-4"><p class="font-medium mb-1">Demo: admin / admin123</p></div>
+            </div>
+            <div class="px-6 pb-6">
+                <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-500">
+                    <p class="flex items-center gap-2"><i data-lucide="shield" class="w-4 h-4"></i>Secure login with session management</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Force Password Change Modal -->
+    <div id="forcePasswordModal" class="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-amber-500 px-6 py-4">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2"><i data-lucide="alert-triangle" class="w-6 h-6"></i>Password Change Required</h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-slate-600">You must change your password before continuing. Please choose a strong password.</p>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" id="forceCurrentPassword" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" id="forceNewPassword" oninput="checkPasswordStrength('forceNewPassword', 'forceStrengthBar', 'forceStrengthText')" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500">
+                    <div class="mt-2 bg-slate-200 rounded-full overflow-hidden"><div id="forceStrengthBar" class="password-strength"></div></div>
+                    <p id="forceStrengthText" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Confirm New Password</label><input type="password" id="forceConfirmPassword" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500"></div>
+                <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
+                    <p class="font-medium mb-1">Password requirements:</p>
+                    <ul class="space-y-1">
+                        <li id="forceReq1" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>At least 8 characters</li>
+                        <li id="forceReq2" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One uppercase letter</li>
+                        <li id="forceReq3" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One lowercase letter</li>
+                        <li id="forceReq4" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One number</li>
+                    </ul>
+                </div>
+                <button onclick="forceChangePassword()" class="w-full py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600">Change Password & Continue</button>
+                <p id="forcePasswordError" class="text-red-600 text-sm text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2"><i data-lucide="key" class="w-5 h-5"></i>Change Password</h2>
+                <button onclick="closeChangePasswordModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" id="currentPassword" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" id="newPassword" oninput="checkPasswordStrength('newPassword', 'strengthBar', 'strengthText')" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500">
+                    <div class="mt-2 bg-slate-200 rounded-full overflow-hidden"><div id="strengthBar" class="password-strength"></div></div>
+                    <p id="strengthText" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Confirm New Password</label><input type="password" id="confirmPassword" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cyan-500"></div>
+                <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
+                    <p class="font-medium mb-1">Password requirements:</p>
+                    <ul class="space-y-1">
+                        <li id="req1" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>At least 8 characters</li>
+                        <li id="req2" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One uppercase letter</li>
+                        <li id="req3" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One lowercase letter</li>
+                        <li id="req4" class="flex items-center gap-1"><i data-lucide="circle" class="w-3 h-3"></i>One number</li>
+                    </ul>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeChangePasswordModal()" class="flex-1 py-3 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                    <button onclick="changePassword()" class="flex-1 py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399]">Change Password</button>
+                </div>
+                <p id="changePasswordError" class="text-red-600 text-sm text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Timeout Warning Modal -->
+    <div id="sessionWarningModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div class="bg-amber-500 px-6 py-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="clock" class="w-5 h-5"></i>Session Expiring</h2>
+            </div>
+            <div class="p-6 text-center">
+                <p class="text-slate-600 mb-4">Your session will expire in <span id="sessionCountdown" class="font-bold text-amber-600">60</span> seconds due to inactivity.</p>
+                <button onclick="extendSession()" class="w-full py-3 bg-[#0099cc] text-white font-semibold rounded-lg hover:bg-[#007399]">Stay Logged In</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Reset Password Modal -->
+    <div id="resetPasswordModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-red-500 px-6 py-4 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="key" class="w-5 h-5"></i>Reset User Password</h2>
+                <button onclick="closeResetPasswordModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-slate-600">Reset password for: <strong id="resetUserName"></strong></p>
+                <input type="hidden" id="resetUserId">
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" id="resetNewPassword" oninput="checkPasswordStrength('resetNewPassword', 'resetStrengthBar', 'resetStrengthText')" class="w-full px-4 py-2 border border-slate-200 rounded-lg">
+                    <div class="mt-2 bg-slate-200 rounded-full overflow-hidden"><div id="resetStrengthBar" class="password-strength"></div></div>
+                    <p id="resetStrengthText" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                    <p class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4"></i>User will be required to change password on next login.</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeResetPasswordModal()" class="flex-1 py-3 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                    <button onclick="adminResetPassword()" class="flex-1 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">Reset Password</button>
+                </div>
+                <p id="resetPasswordError" class="text-red-600 text-sm text-center hidden"></p>
             </div>
         </div>
     </div>
@@ -83,12 +192,19 @@
                             <i data-lucide="clock" class="w-4 h-4 text-cyan-200"></i><span id="currentTime" class="font-mono"></span>
                             <span class="text-cyan-300">|</span><span id="currentDate"></span>
                             <span class="text-cyan-300">|</span>
-                            <button onclick="refreshData()" id="refreshBtn" class="flex items-center gap-1 hover:text-cyan-200"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                            <button onclick="refreshData()" id="refreshBtn" class="flex items-center gap-1 hover:text-cyan-200" title="Refresh data"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
                             <span id="lastUpdate" class="text-xs text-cyan-300"></span>
                         </div>
                         <div class="flex items-center gap-3 pl-4 border-l border-white/20">
                             <div class="text-right hidden sm:block"><p id="displayUsername" class="text-sm font-medium"></p><p id="displayRole" class="text-xs text-cyan-200"></p></div>
-                            <button onclick="logout()" class="px-3 py-1.5 hover:bg-white/10 rounded-lg text-sm">Logout</button>
+                            <div class="relative">
+                                <button onclick="toggleUserMenu()" class="flex items-center gap-1 px-3 py-1.5 hover:bg-white/10 rounded-lg text-sm"><i data-lucide="user" class="w-4 h-4"></i><i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+                                <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50">
+                                    <button onclick="openChangePasswordModal()" class="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"><i data-lucide="key" class="w-4 h-4"></i>Change Password</button>
+                                    <hr class="my-1">
+                                    <button onclick="logout()" class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"><i data-lucide="log-out" class="w-4 h-4"></i>Logout</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -250,7 +366,21 @@
 
             <!-- Users View -->
             <div id="view-users" class="view-panel hidden">
-                <div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200"><h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i>Users</h3></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200"><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Username</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Name</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Role</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Location</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th><th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Actions</th></tr></thead><tbody id="usersBody"></tbody></table></div></div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                        <h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i>User Management</h3>
+                        <button onclick="openAddUserModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="user-plus" class="w-4 h-4"></i>Add User</button>
+                    </div>
+                    <div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Username</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Name</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Role</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Location</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Last Login</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Actions</th>
+                    </tr></thead><tbody id="usersBody"></tbody></table></div>
+                </div>
             </div>
         </main>
     </div>
@@ -258,7 +388,8 @@
     <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg hidden slide-in flex items-center gap-3 z-50"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-400" id="toastIcon"></i><span id="toastMessage"></span></div>
 
     <script>
-        // Global state
+        // ============ GLOBAL STATE ============
+        let authToken = null;
         let currentUser = null;
         let movements = [];
         let auditLog = [];
@@ -266,31 +397,173 @@
         let sortColumn = 'scheduled_dep';
         let sortDirection = 'asc';
         let refreshInterval = null;
+        let lastActivity = Date.now();
+        let sessionWarningTimeout = null;
+        let sessionLogoutTimeout = null;
+        const SESSION_WARNING_TIME = 25 * 60 * 1000; // 25 minutes
+        const SESSION_LOGOUT_TIME = 30 * 60 * 1000;  // 30 minutes
         
         const hubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
         const rolePermissions = { 'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false }, 'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false }, 'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false }, 'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true } };
         const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'admin': 'Admin' };
         function getPermissions() { return currentUser ? rolePermissions[currentUser.role] || rolePermissions['viewer'] : rolePermissions['viewer']; }
 
-        // API helper
+        // ============ API HELPER WITH AUTH ============
         async function api(endpoint, options = {}) {
             const url = `/api${endpoint}`;
             const config = {
-                headers: { 'Content-Type': 'application/json', 'X-User-Name': currentUser?.fullName || 'System' },
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
                 ...options
             };
+            
+            // Add auth token if available
+            if (authToken) {
+                config.headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            
             if (config.body && typeof config.body === 'object') {
                 config.body = JSON.stringify(config.body);
             }
+            
             const response = await fetch(url, config);
+            
+            // Handle 401 - session expired
+            if (response.status === 401) {
+                handleSessionExpired();
+                throw new Error('Session expired');
+            }
+            
             if (!response.ok) {
                 const error = await response.json().catch(() => ({ error: 'Request failed' }));
                 throw new Error(error.error || 'Request failed');
             }
+            
             return response.json();
         }
 
-        // Initialize
+        // ============ SESSION MANAGEMENT ============
+        function resetActivityTimer() {
+            lastActivity = Date.now();
+            clearTimeout(sessionWarningTimeout);
+            clearTimeout(sessionLogoutTimeout);
+            
+            if (authToken) {
+                sessionWarningTimeout = setTimeout(showSessionWarning, SESSION_WARNING_TIME);
+                sessionLogoutTimeout = setTimeout(handleSessionExpired, SESSION_LOGOUT_TIME);
+            }
+        }
+
+        function showSessionWarning() {
+            document.getElementById('sessionWarningModal').classList.remove('hidden');
+            let countdown = 60;
+            const countdownEl = document.getElementById('sessionCountdown');
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+            lucide.createIcons();
+        }
+
+        function extendSession() {
+            document.getElementById('sessionWarningModal').classList.add('hidden');
+            resetActivityTimer();
+            refreshData(); // This will also validate the token
+        }
+
+        function handleSessionExpired() {
+            authToken = null;
+            currentUser = null;
+            clearTimeout(sessionWarningTimeout);
+            clearTimeout(sessionLogoutTimeout);
+            if (refreshInterval) clearInterval(refreshInterval);
+            
+            document.getElementById('sessionWarningModal').classList.add('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
+            document.getElementById('loginError').classList.remove('hidden');
+        }
+
+        // Track user activity
+        document.addEventListener('mousemove', resetActivityTimer);
+        document.addEventListener('keypress', resetActivityTimer);
+        document.addEventListener('click', resetActivityTimer);
+
+        // ============ PASSWORD STRENGTH ============
+        function checkPasswordStrength(inputId, barId, textId) {
+            const password = document.getElementById(inputId).value;
+            const bar = document.getElementById(barId);
+            const text = document.getElementById(textId);
+            
+            let strength = 0;
+            const checks = {
+                length: password.length >= 8,
+                upper: /[A-Z]/.test(password),
+                lower: /[a-z]/.test(password),
+                number: /[0-9]/.test(password)
+            };
+            
+            strength = Object.values(checks).filter(Boolean).length;
+            
+            // Update requirement indicators
+            const prefix = inputId === 'forceNewPassword' ? 'force' : (inputId === 'resetNewPassword' ? 'reset' : '');
+            const reqPrefix = prefix ? prefix + 'Req' : 'req';
+            
+            if (document.getElementById(reqPrefix + '1')) {
+                updateReqIndicator(reqPrefix + '1', checks.length);
+                updateReqIndicator(reqPrefix + '2', checks.upper);
+                updateReqIndicator(reqPrefix + '3', checks.lower);
+                updateReqIndicator(reqPrefix + '4', checks.number);
+            }
+            
+            bar.className = 'password-strength';
+            if (strength === 0) {
+                bar.classList.add('strength-weak');
+                bar.style.width = '0%';
+                text.textContent = '';
+            } else if (strength === 1) {
+                bar.classList.add('strength-weak');
+                text.textContent = 'Weak';
+            } else if (strength === 2) {
+                bar.classList.add('strength-fair');
+                text.textContent = 'Fair';
+            } else if (strength === 3) {
+                bar.classList.add('strength-good');
+                text.textContent = 'Good';
+            } else {
+                bar.classList.add('strength-strong');
+                text.textContent = 'Strong';
+            }
+        }
+
+        function updateReqIndicator(id, met) {
+            const el = document.getElementById(id);
+            if (el) {
+                const icon = el.querySelector('i, svg');
+                if (icon) {
+                    icon.setAttribute('data-lucide', met ? 'check-circle' : 'circle');
+                    icon.className = met ? 'w-3 h-3 text-emerald-500' : 'w-3 h-3 text-slate-400';
+                }
+                el.className = met ? 'flex items-center gap-1 text-emerald-600' : 'flex items-center gap-1';
+                lucide.createIcons();
+            }
+        }
+
+        function validatePassword(password) {
+            const errors = [];
+            if (password.length < 8) errors.push('at least 8 characters');
+            if (!/[A-Z]/.test(password)) errors.push('one uppercase letter');
+            if (!/[a-z]/.test(password)) errors.push('one lowercase letter');
+            if (!/[0-9]/.test(password)) errors.push('one number');
+            return errors;
+        }
+
+        // ============ INITIALIZE ============
         document.addEventListener('DOMContentLoaded', function() {
             lucide.createIcons();
             updateClock();
@@ -311,46 +584,139 @@
             document.getElementById('liveBoardStatusFilter').innerHTML = '<option value="">All Statuses</option><option value="scheduled">Scheduled</option><option value="loading">Loading</option><option value="departed">Departed</option><option value="in-transit">In Transit</option><option value="arrived">Arrived</option><option value="complete">Complete</option><option value="delayed">Delayed</option><option value="cancelled">Cancelled</option>';
         }
 
-        // Auth
+        // ============ AUTH ============
         async function login() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
+            const loginBtn = document.getElementById('loginBtn');
+            
+            if (!username || !password) {
+                document.getElementById('loginError').textContent = 'Please enter username and password';
+                document.getElementById('loginError').classList.remove('hidden');
+                return;
+            }
+            
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing in...';
             
             try {
-                const user = await api('/auth/login', {
+                const response = await fetch('/api/auth/login', {
                     method: 'POST',
-                    body: { username, password }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
                 });
                 
-                currentUser = user;
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Login failed');
+                }
+                
+                authToken = data.token;
+                currentUser = data.user;
+                
                 document.getElementById('loginError').classList.add('hidden');
-                document.getElementById('loginModal').classList.add('hidden');
-                document.getElementById('mainApp').classList.remove('hidden');
-                document.getElementById('displayUsername').textContent = currentUser.fullName;
-                document.getElementById('displayRole').textContent = roleLabels[currentUser.role];
+                document.getElementById('loginPassword').value = '';
                 
-                applyRolePermissions();
-                await refreshData();
+                // Check if password change is required
+                if (currentUser.forcePasswordChange) {
+                    document.getElementById('loginModal').classList.add('hidden');
+                    document.getElementById('forcePasswordModal').classList.remove('hidden');
+                    lucide.createIcons();
+                    return;
+                }
                 
-                // Auto-refresh every 30 seconds
-                refreshInterval = setInterval(refreshData, 30000);
-                
-                lucide.createIcons();
+                completeLogin();
             } catch (err) {
                 document.getElementById('loginError').textContent = err.message;
                 document.getElementById('loginError').classList.remove('hidden');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Sign In';
             }
         }
 
-        function logout() {
-            if (refreshInterval) clearInterval(refreshInterval);
-            document.getElementById('loginModal').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
+        function completeLogin() {
+            document.getElementById('loginModal').classList.add('hidden');
+            document.getElementById('forcePasswordModal').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('displayUsername').textContent = currentUser.fullName;
+            document.getElementById('displayRole').textContent = roleLabels[currentUser.role];
+            
+            applyRolePermissions();
+            resetActivityTimer();
+            refreshData();
+            
+            refreshInterval = setInterval(refreshData, 30000);
+            lucide.createIcons();
+        }
+
+        async function forceChangePassword() {
+            const currentPwd = document.getElementById('forceCurrentPassword').value;
+            const newPwd = document.getElementById('forceNewPassword').value;
+            const confirmPwd = document.getElementById('forceConfirmPassword').value;
+            
+            const errors = validatePassword(newPwd);
+            if (errors.length > 0) {
+                document.getElementById('forcePasswordError').textContent = `Password must contain ${errors.join(', ')}`;
+                document.getElementById('forcePasswordError').classList.remove('hidden');
+                return;
+            }
+            
+            if (newPwd !== confirmPwd) {
+                document.getElementById('forcePasswordError').textContent = 'Passwords do not match';
+                document.getElementById('forcePasswordError').classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                await api('/auth/change-password', {
+                    method: 'POST',
+                    body: { currentPassword: currentPwd, newPassword: newPwd }
+                });
+                
+                showToast('Password changed successfully');
+                currentUser.forcePasswordChange = false;
+                completeLogin();
+            } catch (err) {
+                document.getElementById('forcePasswordError').textContent = err.message;
+                document.getElementById('forcePasswordError').classList.remove('hidden');
+            }
+        }
+
+        async function logout() {
+            try {
+                await api('/auth/logout', { method: 'POST' });
+            } catch (err) {
+                console.error('Logout error:', err);
+            }
+            
+            authToken = null;
             currentUser = null;
             movements = [];
+            clearTimeout(sessionWarningTimeout);
+            clearTimeout(sessionLogoutTimeout);
+            if (refreshInterval) clearInterval(refreshInterval);
+            
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('userMenu').classList.add('hidden');
         }
+
+        function toggleUserMenu() {
+            document.getElementById('userMenu').classList.toggle('hidden');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('userMenu');
+            const btn = e.target.closest('button');
+            if (menu && !menu.contains(e.target) && (!btn || !btn.onclick?.toString().includes('toggleUserMenu'))) {
+                menu.classList.add('hidden');
+            }
+        });
 
         function applyRolePermissions() {
             const perms = getPermissions();
@@ -359,24 +725,114 @@
             document.querySelectorAll('.col-actions').forEach(el => el.classList.toggle('hidden', !perms.canManageTrunks));
         }
 
-        // Data loading
+        // ============ PASSWORD CHANGE MODAL ============
+        function openChangePasswordModal() {
+            document.getElementById('userMenu').classList.add('hidden');
+            document.getElementById('changePasswordModal').classList.remove('hidden');
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            document.getElementById('changePasswordError').classList.add('hidden');
+            document.getElementById('strengthBar').className = 'password-strength';
+            document.getElementById('strengthText').textContent = '';
+            lucide.createIcons();
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('hidden');
+        }
+
+        async function changePassword() {
+            const currentPwd = document.getElementById('currentPassword').value;
+            const newPwd = document.getElementById('newPassword').value;
+            const confirmPwd = document.getElementById('confirmPassword').value;
+            
+            const errors = validatePassword(newPwd);
+            if (errors.length > 0) {
+                document.getElementById('changePasswordError').textContent = `Password must contain ${errors.join(', ')}`;
+                document.getElementById('changePasswordError').classList.remove('hidden');
+                return;
+            }
+            
+            if (newPwd !== confirmPwd) {
+                document.getElementById('changePasswordError').textContent = 'Passwords do not match';
+                document.getElementById('changePasswordError').classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                await api('/auth/change-password', {
+                    method: 'POST',
+                    body: { currentPassword: currentPwd, newPassword: newPwd }
+                });
+                
+                closeChangePasswordModal();
+                showToast('Password changed successfully');
+            } catch (err) {
+                document.getElementById('changePasswordError').textContent = err.message;
+                document.getElementById('changePasswordError').classList.remove('hidden');
+            }
+        }
+
+        // ============ ADMIN PASSWORD RESET ============
+        function openResetPasswordModal(userId, userName) {
+            document.getElementById('resetUserId').value = userId;
+            document.getElementById('resetUserName').textContent = userName;
+            document.getElementById('resetNewPassword').value = '';
+            document.getElementById('resetPasswordError').classList.add('hidden');
+            document.getElementById('resetStrengthBar').className = 'password-strength';
+            document.getElementById('resetStrengthText').textContent = '';
+            document.getElementById('resetPasswordModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeResetPasswordModal() {
+            document.getElementById('resetPasswordModal').classList.add('hidden');
+        }
+
+        async function adminResetPassword() {
+            const userId = document.getElementById('resetUserId').value;
+            const newPwd = document.getElementById('resetNewPassword').value;
+            
+            const errors = validatePassword(newPwd);
+            if (errors.length > 0) {
+                document.getElementById('resetPasswordError').textContent = `Password must contain ${errors.join(', ')}`;
+                document.getElementById('resetPasswordError').classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                await api(`/users/${userId}/reset-password`, {
+                    method: 'POST',
+                    body: { newPassword: newPwd }
+                });
+                
+                closeResetPasswordModal();
+                showToast('Password reset successfully');
+                loadUsers();
+            } catch (err) {
+                document.getElementById('resetPasswordError').textContent = err.message;
+                document.getElementById('resetPasswordError').classList.remove('hidden');
+            }
+        }
+
+        // ============ DATA LOADING ============
         async function refreshData() {
             const btn = document.getElementById('refreshBtn');
             const icon = btn ? (btn.querySelector('svg') || btn.querySelector('i')) : null;
             if (icon) icon.classList.add('refresh-indicator');
             
             try {
-                console.log('Fetching movements...');
                 movements = await api('/movements');
-                console.log('Got movements:', movements.length);
                 auditLog = await api('/audit?limit=50');
-                console.log('Got audit log:', auditLog.length);
                 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB');
                 renderAll();
             } catch (err) {
                 console.error('Refresh error:', err);
-                showToast('Failed to refresh data', 'error');
+                if (err.message !== 'Session expired') {
+                    showToast('Failed to refresh data', 'error');
+                }
             } finally {
                 if (icon) icon.classList.remove('refresh-indicator');
             }
@@ -460,7 +916,6 @@
                 return true;
             });
             
-            // Sort
             filtered.sort((a, b) => {
                 let valA = a[sortColumn] || '';
                 let valB = b[sortColumn] || '';
@@ -516,7 +971,75 @@
             document.getElementById('auditLogBody').innerHTML = auditLog.map(l => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono text-xs">${new Date(l.created_at).toLocaleString('en-GB')}</td><td class="px-3 py-2">${l.user_name}</td><td class="px-3 py-2 font-medium">${l.action}</td><td class="px-3 py-2">${l.details || ''}</td></tr>`).join('') || '<tr><td colspan="4" class="text-center py-8 text-slate-500">No audit entries</td></tr>';
         }
 
-        // Actions
+        // ============ USER MANAGEMENT ============
+        async function loadUsers() {
+            try {
+                users = await api('/users');
+                renderUsers();
+            } catch (err) {
+                console.error('Load users error:', err);
+            }
+        }
+
+        function renderUsers() {
+            document.getElementById('usersBody').innerHTML = users.map(u => {
+                const isLocked = u.locked_until && new Date(u.locked_until) > new Date();
+                const statusBadge = !u.active ? '<span class="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700">Disabled</span>' :
+                    isLocked ? '<span class="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">Locked</span>' :
+                    '<span class="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">Active</span>';
+                const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString('en-GB') : 'Never';
+                
+                return `<tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono">${u.username}</td>
+                    <td class="px-3 py-2 font-medium">${u.full_name}${u.force_password_change ? ' <span class="text-xs text-amber-600">(must change pwd)</span>' : ''}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded bg-slate-100">${roleLabels[u.role] || u.role}</span></td>
+                    <td class="px-3 py-2">${u.location || '—'}</td>
+                    <td class="px-3 py-2">${statusBadge}</td>
+                    <td class="px-3 py-2 text-xs text-slate-500">${lastLogin}</td>
+                    <td class="px-3 py-2">
+                        <div class="flex items-center gap-1">
+                            ${isLocked ? `<button onclick="unlockUser(${u.id})" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" title="Unlock account">Unlock</button>` : ''}
+                            <button onclick="openResetPasswordModal(${u.id}, '${u.full_name}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" title="Reset password">Reset Pwd</button>
+                            <button onclick="forceLogoutUser(${u.id})" class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs hover:bg-purple-200" title="Force logout">Logout</button>
+                            <button onclick="toggleUser(${u.id})" class="px-2 py-1 ${u.active ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'} rounded text-xs">${u.active ? 'Disable' : 'Enable'}</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="7" class="text-center py-8 text-slate-500">No users found</td></tr>';
+        }
+
+        async function toggleUser(id) {
+            try {
+                await api(`/users/${id}/toggle`, { method: 'PATCH' });
+                showToast('User status updated');
+                loadUsers();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function unlockUser(id) {
+            try {
+                await api(`/users/${id}/unlock`, { method: 'PATCH' });
+                showToast('User account unlocked');
+                loadUsers();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        async function forceLogoutUser(id) {
+            if (!confirm('This will terminate all active sessions for this user. Continue?')) return;
+            try {
+                await api(`/users/${id}/force-logout`, { method: 'POST' });
+                showToast('User sessions terminated');
+                loadUsers();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        // ============ ACTIONS ============
         async function logDeparture() {
             const id = document.getElementById('depTrunkSelect').value;
             if (!id) { showToast('Select trunk', 'error'); return; }
@@ -538,7 +1061,6 @@
                 showToast('Departure logged');
                 await refreshData();
                 
-                // Clear form
                 document.getElementById('depVehicleReg').value = '';
                 document.getElementById('depTrailer').value = '';
                 document.getElementById('depDriverName').value = '';
@@ -627,7 +1149,7 @@
             }
         }
 
-        // Navigation
+        // ============ NAVIGATION ============
         function showView(viewName) {
             document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
             document.getElementById(`view-${viewName}`).classList.remove('hidden');
@@ -635,6 +1157,12 @@
                 btn.classList.remove('active');
                 if (btn.dataset.view === viewName) btn.classList.add('active');
             });
+            
+            // Load users when switching to users view
+            if (viewName === 'users' && getPermissions().canManageUsers) {
+                loadUsers();
+            }
+            
             lucide.createIcons();
         }
 
@@ -653,8 +1181,9 @@
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             document.getElementById('toastMessage').textContent = message;
-            document.getElementById('toastIcon').setAttribute('data-lucide', type === 'error' ? 'x-circle' : 'check-circle');
-            document.getElementById('toastIcon').className = `w-5 h-5 ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`;
+            const icon = document.getElementById('toastIcon');
+            icon.setAttribute('data-lucide', type === 'error' ? 'x-circle' : 'check-circle');
+            icon.className = `w-5 h-5 ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`;
             lucide.createIcons();
             toast.classList.remove('hidden');
             setTimeout(() => toast.classList.add('hidden'), 3000);

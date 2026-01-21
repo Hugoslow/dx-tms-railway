@@ -1,0 +1,493 @@
+<!-- 
+  DAILY REPORTS PAGE
+  Add this as a new page in your TMS, or integrate the content into your existing index.html
+  This shows the 5am "State of the Nation" reports with day-on-day comparison
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Reports - DX TMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="/" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </a>
+                <h1 class="text-xl font-bold text-slate-800">Daily Reports</h1>
+                <span class="text-sm text-slate-500">5am State of the Nation</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <select id="dateRange" onchange="loadReports()" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    <option value="7">Last 7 Days</option>
+                    <option value="14">Last 14 Days</option>
+                    <option value="30">Last 30 Days</option>
+                </select>
+                <button onclick="refreshReports()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-7xl mx-auto">
+        <!-- Latest Report Summary -->
+        <div id="latestReport" class="mb-8">
+            <h2 class="text-lg font-semibold text-slate-700 mb-4">Latest Report</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="summaryCards">
+                <!-- Cards populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Comparison Section -->
+        <div id="comparisonSection" class="mb-8">
+            <h2 class="text-lg font-semibold text-slate-700 mb-4">Day-on-Day Comparison</h2>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div>
+                        <label class="text-sm text-slate-600">Compare</label>
+                        <input type="date" id="compareDate1" class="ml-2 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                    <span class="text-slate-400">vs</span>
+                    <div>
+                        <input type="date" id="compareDate2" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                    <button onclick="compareReports()" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">
+                        Compare
+                    </button>
+                </div>
+                <div id="comparisonResults" class="hidden">
+                    <!-- Comparison results populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Reports Table -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+            <div class="p-4 border-b border-slate-200">
+                <h2 class="text-lg font-semibold text-slate-700">Report History</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Date</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Total</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Completed</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Completion %</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Dep OTP</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Arr OTP</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Delayed</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsTable">
+                        <!-- Rows populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Report Detail Modal -->
+        <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div class="p-6 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white">
+                    <h3 class="text-lg font-semibold text-slate-800" id="modalTitle">Report Details</h3>
+                    <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div id="modalContent" class="p-6">
+                    <!-- Detail content populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = '';
+        let authToken = localStorage.getItem('token');
+
+        // Check auth
+        if (!authToken) {
+            window.location.href = '/';
+        }
+
+        // Load reports on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            loadReports();
+            
+            // Set default comparison dates (yesterday vs day before)
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const dayBefore = new Date(today);
+            dayBefore.setDate(dayBefore.getDate() - 2);
+            
+            document.getElementById('compareDate1').value = dayBefore.toISOString().split('T')[0];
+            document.getElementById('compareDate2').value = yesterday.toISOString().split('T')[0];
+        });
+
+        async function loadReports() {
+            const days = document.getElementById('dateRange').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/daily-reports?days=${days}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load reports');
+                
+                const reports = await response.json();
+                renderReports(reports);
+                
+                if (reports.length > 0) {
+                    renderLatestSummary(reports[0]);
+                }
+                
+            } catch (err) {
+                console.error('Load error:', err);
+                alert('Failed to load reports');
+            }
+        }
+
+        function refreshReports() {
+            loadReports();
+        }
+
+        function renderLatestSummary(report) {
+            const cards = document.getElementById('summaryCards');
+            
+            const completionColor = report.completion_rate >= 95 ? 'green' : report.completion_rate >= 85 ? 'amber' : 'red';
+            const depOtpColor = report.departure_otp >= 90 ? 'green' : report.departure_otp >= 80 ? 'amber' : 'red';
+            const arrOtpColor = report.arrival_otp >= 90 ? 'green' : report.arrival_otp >= 80 ? 'amber' : 'red';
+            
+            cards.innerHTML = `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div class="text-sm text-slate-500 mb-1">Total Movements</div>
+                    <div class="text-2xl font-bold text-slate-800">${report.total_movements}</div>
+                    <div class="text-xs text-slate-400 mt-1">${report.operational_day}</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div class="text-sm text-slate-500 mb-1">Completion Rate</div>
+                    <div class="text-2xl font-bold text-${completionColor}-600">${report.completion_rate}%</div>
+                    <div class="text-xs text-slate-400 mt-1">${report.completed_count} of ${report.total_movements - report.cancelled_count}</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div class="text-sm text-slate-500 mb-1">Departure OTP</div>
+                    <div class="text-2xl font-bold text-${depOtpColor}-600">${report.departure_otp}%</div>
+                    <div class="text-xs text-slate-400 mt-1">${report.on_time_departures} on-time</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div class="text-sm text-slate-500 mb-1">Arrival OTP</div>
+                    <div class="text-2xl font-bold text-${arrOtpColor}-600">${report.arrival_otp}%</div>
+                    <div class="text-xs text-slate-400 mt-1">${report.on_time_arrivals} on-time</div>
+                </div>
+            `;
+        }
+
+        function renderReports(reports) {
+            const tbody = document.getElementById('reportsTable');
+            
+            if (reports.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-slate-500">
+                            No reports found. Reports are generated automatically at 5am.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = reports.map(report => {
+                const completionColor = report.completion_rate >= 95 ? 'green' : report.completion_rate >= 85 ? 'amber' : 'red';
+                const depOtpColor = report.departure_otp >= 90 ? 'green' : report.departure_otp >= 80 ? 'amber' : 'red';
+                const arrOtpColor = report.arrival_otp >= 90 ? 'green' : report.arrival_otp >= 80 ? 'amber' : 'red';
+                
+                return `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="px-4 py-3 font-medium text-slate-800">${formatDate(report.operational_day)}</td>
+                        <td class="px-4 py-3 text-slate-600">${report.total_movements}</td>
+                        <td class="px-4 py-3 text-slate-600">${report.completed_count}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-${completionColor}-100 text-${completionColor}-700">
+                                ${report.completion_rate}%
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-${depOtpColor}-100 text-${depOtpColor}-700">
+                                ${report.departure_otp}%
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-${arrOtpColor}-100 text-${arrOtpColor}-700">
+                                ${report.arrival_otp}%
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            ${report.delayed_count > 0 
+                                ? `<span class="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">${report.delayed_count}</span>`
+                                : '<span class="text-slate-400">0</span>'
+                            }
+                        </td>
+                        <td class="px-4 py-3">
+                            <button onclick="viewDetail('${report.report_date}')" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                View Detail
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function viewDetail(date) {
+            try {
+                const response = await fetch(`${API_BASE}/api/daily-reports/${date}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load report');
+                
+                const report = await response.json();
+                showDetailModal(report);
+                
+            } catch (err) {
+                console.error('Detail error:', err);
+                alert('Failed to load report detail');
+            }
+        }
+
+        function showDetailModal(report) {
+            const modal = document.getElementById('detailModal');
+            const title = document.getElementById('modalTitle');
+            const content = document.getElementById('modalContent');
+            
+            title.textContent = `Report: ${formatDate(report.operational_day)}`;
+            
+            const hubBreakdown = report.hub_breakdown || {};
+            const contractorBreakdown = report.contractor_breakdown || {};
+            const delayedMovements = report.delayed_movements || [];
+            
+            content.innerHTML = `
+                <!-- Summary Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">Total</div>
+                        <div class="text-xl font-bold text-slate-800">${report.total_movements}</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">Completed</div>
+                        <div class="text-xl font-bold text-green-600">${report.completed_count}</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">In Progress</div>
+                        <div class="text-xl font-bold text-blue-600">${report.in_progress_count}</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">Delayed</div>
+                        <div class="text-xl font-bold text-red-600">${report.delayed_count}</div>
+                    </div>
+                </div>
+                
+                <!-- Performance Metrics -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-semibold text-slate-700 mb-3">Performance Metrics</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="border border-slate-200 rounded-lg p-3">
+                            <div class="text-xs text-slate-500">Completion Rate</div>
+                            <div class="text-lg font-bold">${report.completion_rate}%</div>
+                        </div>
+                        <div class="border border-slate-200 rounded-lg p-3">
+                            <div class="text-xs text-slate-500">Departure OTP</div>
+                            <div class="text-lg font-bold">${report.departure_otp}%</div>
+                            <div class="text-xs text-slate-400">${report.on_time_departures} on-time, ${report.late_departures} late</div>
+                        </div>
+                        <div class="border border-slate-200 rounded-lg p-3">
+                            <div class="text-xs text-slate-500">Arrival OTP</div>
+                            <div class="text-lg font-bold">${report.arrival_otp}%</div>
+                            <div class="text-xs text-slate-400">${report.on_time_arrivals} on-time, ${report.late_arrivals} late</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hub Breakdown -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-semibold text-slate-700 mb-3">By Hub</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="bg-slate-50">
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Hub</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Total</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Completed</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Completion %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${Object.entries(hubBreakdown).map(([hub, data]) => `
+                                    <tr class="border-b border-slate-100">
+                                        <td class="px-3 py-2 font-medium">${hub}</td>
+                                        <td class="px-3 py-2">${data.total}</td>
+                                        <td class="px-3 py-2">${data.completed}</td>
+                                        <td class="px-3 py-2">${data.completionRate}%</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Delayed Movements -->
+                ${delayedMovements.length > 0 ? `
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-700 mb-3">Delayed Movements (${delayedMovements.length})</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="bg-red-50">
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Trunk ID</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contractor</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Origin</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Destination</th>
+                                        <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Sched Dep</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${delayedMovements.map(m => `
+                                        <tr class="border-b border-slate-100">
+                                            <td class="px-3 py-2 font-medium">${m.trunkId}</td>
+                                            <td class="px-3 py-2">${m.contractor || '-'}</td>
+                                            <td class="px-3 py-2">${m.origin}</td>
+                                            <td class="px-3 py-2">${m.destination}</td>
+                                            <td class="px-3 py-2">${m.scheduledDep || '-'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('detailModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function compareReports() {
+            const date1 = document.getElementById('compareDate1').value;
+            const date2 = document.getElementById('compareDate2').value;
+            
+            if (!date1 || !date2) {
+                alert('Please select both dates');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/daily-reports/compare/${date1}/${date2}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to compare reports');
+                
+                const comparison = await response.json();
+                renderComparison(comparison);
+                
+            } catch (err) {
+                console.error('Compare error:', err);
+                alert('Failed to compare reports. Make sure both dates have reports generated.');
+            }
+        }
+
+        function renderComparison(comparison) {
+            const container = document.getElementById('comparisonResults');
+            const changes = comparison.changes;
+            
+            container.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="text-sm text-slate-500 mb-2">Completion Rate</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xl font-bold">${changes.completionRate.to}%</span>
+                            ${renderChange(changes.completionRate.change, '%')}
+                        </div>
+                        <div class="text-xs text-slate-400">was ${changes.completionRate.from}%</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="text-sm text-slate-500 mb-2">Departure OTP</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xl font-bold">${changes.departureOtp.to}%</span>
+                            ${renderChange(changes.departureOtp.change, '%')}
+                        </div>
+                        <div class="text-xs text-slate-400">was ${changes.departureOtp.from}%</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="text-sm text-slate-500 mb-2">Arrival OTP</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xl font-bold">${changes.arrivalOtp.to}%</span>
+                            ${renderChange(changes.arrivalOtp.change, '%')}
+                        </div>
+                        <div class="text-xs text-slate-400">was ${changes.arrivalOtp.from}%</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="text-sm text-slate-500 mb-2">Delayed</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-xl font-bold">${changes.delayedCount.to}</span>
+                            ${renderChange(-changes.delayedCount.change, '', true)}
+                        </div>
+                        <div class="text-xs text-slate-400">was ${changes.delayedCount.from}</div>
+                    </div>
+                </div>
+            `;
+            
+            container.classList.remove('hidden');
+        }
+
+        function renderChange(change, suffix = '', invertColors = false) {
+            const num = parseFloat(change);
+            if (num === 0) return '<span class="text-slate-400 text-sm">no change</span>';
+            
+            const isPositive = invertColors ? num < 0 : num > 0;
+            const color = isPositive ? 'green' : 'red';
+            const arrow = num > 0 ? '↑' : '↓';
+            
+            return `<span class="text-${color}-600 text-sm font-medium">${arrow} ${Math.abs(num)}${suffix}</span>`;
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr + 'T00:00:00');
+            return date.toLocaleDateString('en-GB', { 
+                weekday: 'short', 
+                day: 'numeric', 
+                month: 'short' 
+            });
+        }
+
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Close modal on backdrop click
+        document.getElementById('detailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'detailModal') closeModal();
+        });
+    </script>
+</body>
+</html>

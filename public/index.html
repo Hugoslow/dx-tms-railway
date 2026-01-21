@@ -362,11 +362,15 @@
         // Data loading
         async function refreshData() {
             const btn = document.getElementById('refreshBtn');
-            btn.querySelector('i').classList.add('refresh-indicator');
+            const icon = btn ? (btn.querySelector('svg') || btn.querySelector('i')) : null;
+            if (icon) icon.classList.add('refresh-indicator');
             
             try {
+                console.log('Fetching movements...');
                 movements = await api('/movements');
+                console.log('Got movements:', movements.length);
                 auditLog = await api('/audit?limit=50');
+                console.log('Got audit log:', auditLog.length);
                 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB');
                 renderAll();
@@ -374,7 +378,7 @@
                 console.error('Refresh error:', err);
                 showToast('Failed to refresh data', 'error');
             } finally {
-                btn.querySelector('i').classList.remove('refresh-indicator');
+                if (icon) icon.classList.remove('refresh-indicator');
             }
         }
 

@@ -167,12 +167,12 @@ function authenticateToken(req, res, next) {
 // ============ ROLE-BASED ACCESS CONTROL ============
 
 const rolePermissions = {
-  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false },
-  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false },
-  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false },
-  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false },
-  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false },
-  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true }
+  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false },
+  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true },
+  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false },
+  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true },
+  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true },
+  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true }
 };
 
 function requirePermission(permission) {
@@ -459,7 +459,8 @@ app.patch('/api/movements/:id', authenticateToken, async (req, res) => {
     const allowedFields = [
       'status', 'vehicle_reg', 'trailer', 'driver', 'driver_mobile',
       'actual_dep', 'gate_arrival', 'dock_time', 'tip_start', 'tip_complete',
-      'bay', 'seal', 'fill_percent', 'cages', 'cancel_reason'
+      'bay', 'seal', 'fill_percent', 'cages', 'cancel_reason',
+      'contractor', 'vehicle_type', 'scheduled_dep', 'scheduled_arr'
     ];
     
     for (const [key, value] of Object.entries(updates)) {

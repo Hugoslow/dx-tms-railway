@@ -646,7 +646,11 @@
                                 <p class="text-xs text-slate-500">Arr On-Time</p>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                            <div class="bg-orange-50 rounded-lg p-4 text-center border-2 border-orange-200">
+                                <p class="text-3xl font-bold text-orange-600" id="metricToGo">0</p>
+                                <p class="text-xs text-slate-500">Trunks To Go</p>
+                            </div>
                             <div class="bg-red-50 rounded-lg p-4 text-center">
                                 <p class="text-2xl font-bold text-red-600" id="metricDepMinsLost">0</p>
                                 <p class="text-xs text-slate-500">Dep Mins Lost</p>
@@ -1975,6 +1979,7 @@
             document.getElementById('metricDeparted').textContent = m.departed;
             document.getElementById('metricArrived').textContent = m.arrived;
             document.getElementById('metricComplete').textContent = m.complete;
+            document.getElementById('metricToGo').textContent = m.total - m.complete;
             document.getElementById('metricDepOnTime').textContent = m.depOnTimePercent + '%';
             document.getElementById('metricArrOnTime').textContent = m.arrOnTimePercent + '%';
             document.getElementById('metricDepMinsLost').textContent = m.depMinsLost;
@@ -1993,6 +1998,17 @@
             const arrCard = document.getElementById('metricArrOnTimeCard');
             arrCard.className = `rounded-lg p-4 text-center ${arrColor.bg}`;
             document.getElementById('metricArrOnTime').className = `text-3xl font-bold ${arrColor.text}`;
+            
+            // Color code Trunks To Go - green when 0, orange otherwise
+            const toGo = m.total - m.complete;
+            const toGoCard = document.getElementById('metricToGo').parentElement;
+            if (toGo === 0) {
+                toGoCard.className = 'bg-emerald-50 rounded-lg p-4 text-center border-2 border-emerald-300';
+                document.getElementById('metricToGo').className = 'text-3xl font-bold text-emerald-600';
+            } else {
+                toGoCard.className = 'bg-orange-50 rounded-lg p-4 text-center border-2 border-orange-200';
+                document.getElementById('metricToGo').className = 'text-3xl font-bold text-orange-600';
+            }
         }
 
         function renderHubMetrics(hubData) {

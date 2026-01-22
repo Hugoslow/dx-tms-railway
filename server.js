@@ -1358,6 +1358,264 @@ app.get('/api/metrics/dates', authenticateToken, async (req, res) => {
   }
 });
 
+// ============ DAILY REPORT EXPORT ENDPOINT ============
+
+app.get('/api/daily-reports/:date/export', authenticateToken, async (req, res) => {
+  try {
+    const reportDate = req.params.date;
+    
+    // Get the daily report data
+    const reportResult = await pool.query(
+      'SELECT * FROM daily_reports WHERE report_date = $1',
+      [reportDate]
+    );
+    
+    if (reportResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found for this date' });
+    }
+    
+    const report = reportResult.rows[0];
+    
+    // Get the actual movements for that day
+    const movementsResult = await pool.query(
+      `SELECT * FROM trunk_movements WHERE movement_date = $1 ORDER BY scheduled_dep`,
+      [reportDate]
+    );
+    const movements = movementsResult.rows;
+    
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'DX TMS';
+    workbook.created = new Date();
+    
+    // ============ SUMMARY SHEET ============
+    const summarySheet = workbook.addWorksheet('Summary');
+    
+    // Title
+    summarySheet.mergeCells('A1:I1');
+    summarySheet.getCell('A1').value = 'DX Trunking Daily Report (5am Snapshot)';
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
+    
+    const reportDateFormatted = new Date(reportDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    summarySheet.mergeCells('A2:I2');
+    summarySheet.getCell('A2').value = `Report Date: ${reportDateFormatted}`;
+    summarySheet.getCell('A2').alignment = { horizontal: 'center' };
+    
+    summarySheet.mergeCells('A3:I3');
+    summarySheet.getCell('A3').value = `Generated: ${new Date(report.generated_at).toLocaleString('en-GB')}`;
+    summarySheet.getCell('A3').alignment = { horizontal: 'center' };
+    summarySheet.getCell('A3').font = { italic: true, size: 10 };
+    
+    // Network summary
+    summarySheet.getCell('A5').value = 'Network Summary';
+    summarySheet.getCell('A5').font = { bold: true, size: 14 };
+    
+    const networkData = [
+      ['Total Trunks', report.total_movements],
+      ['Inbound', report.inbound_count],
+      ['Outbound', report.outbound_count],
+      ['Transfer', report.transfer_count],
+      ['', ''],
+      ['Completed', report.completed_count],
+      ['In Progress', report.in_progress_count],
+      ['Scheduled', report.scheduled_count],
+      ['Delayed', report.delayed_count],
+      ['Cancelled', report.cancelled_count],
+      ['', ''],
+      ['Completion Rate', `${report.completion_rate}%`],
+      ['Departure On-Time %', `${report.departure_otp}%`],
+      ['On-Time Departures', report.on_time_departures],
+      ['Late Departures', report.late_departures],
+      ['Arrival On-Time %', `${report.arrival_otp}%`],
+      ['On-Time Arrivals', report.on_time_arrivals],
+      ['Late Arrivals', report.late_arrivals],
+      ['', ''],
+      ['Avg Departure Variance (mins)', report.avg_departure_variance],
+      ['Avg Arrival Variance (mins)', report.avg_arrival_variance]
+    ];
+    
+    networkData.forEach((row, idx) => {
+      summarySheet.getCell(`A${7 + idx}`).value = row[0];
+      summarySheet.getCell(`B${7 + idx}`).value = row[1];
+      if (row[0] !== '') {
+        summarySheet.getCell(`A${7 + idx}`).font = { bold: true };
+      }
+    });
+    
+    // Hub breakdown table
+    const hubStartRow = 32;
+    summarySheet.getCell(`A${hubStartRow}`).value = 'Hub Performance';
+    summarySheet.getCell(`A${hubStartRow}`).font = { bold: true, size: 14 };
+    
+    const hubHeaders = ['Hub', 'Total', 'Completed', 'In Progress', 'Delayed'];
+    hubHeaders.forEach((header, idx) => {
+      const cell = summarySheet.getCell(hubStartRow + 1, idx + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+    });
+    
+    const hubBreakdown = report.hub_breakdown || {};
+    Object.entries(hubBreakdown).forEach(([hub, data], idx) => {
+      const rowNum = hubStartRow + 2 + idx;
+      summarySheet.getCell(rowNum, 1).value = hub;
+      summarySheet.getCell(rowNum, 2).value = data.total || 0;
+      summarySheet.getCell(rowNum, 3).value = data.completed || 0;
+      summarySheet.getCell(rowNum, 4).value = data.inProgress || 0;
+      summarySheet.getCell(rowNum, 5).value = data.delayed || 0;
+      
+      if ((data.delayed || 0) > 0) {
+        summarySheet.getCell(rowNum, 5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } };
+        summarySheet.getCell(rowNum, 5).font = { color: { argb: 'DC2626' } };
+      }
+    });
+    
+    // Contractor breakdown table
+    const contractorStartRow = hubStartRow + Object.keys(hubBreakdown).length + 5;
+    summarySheet.getCell(`A${contractorStartRow}`).value = 'Contractor Performance';
+    summarySheet.getCell(`A${contractorStartRow}`).font = { bold: true, size: 14 };
+    
+    const contractorHeaders = ['Contractor', 'Total', 'Completed', 'Delayed'];
+    contractorHeaders.forEach((header, idx) => {
+      const cell = summarySheet.getCell(contractorStartRow + 1, idx + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+    });
+    
+    const contractorBreakdown = report.contractor_breakdown || {};
+    Object.entries(contractorBreakdown).forEach(([contractor, data], idx) => {
+      const rowNum = contractorStartRow + 2 + idx;
+      summarySheet.getCell(rowNum, 1).value = contractor;
+      summarySheet.getCell(rowNum, 2).value = data.total || 0;
+      summarySheet.getCell(rowNum, 3).value = data.completed || 0;
+      summarySheet.getCell(rowNum, 4).value = data.delayed || 0;
+      
+      if ((data.delayed || 0) > 0) {
+        summarySheet.getCell(rowNum, 4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } };
+        summarySheet.getCell(rowNum, 4).font = { color: { argb: 'DC2626' } };
+      }
+    });
+    
+    // Set column widths
+    summarySheet.columns = [
+      { width: 25 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }
+    ];
+    
+    // ============ DETAIL SHEET ============
+    const detailSheet = workbook.addWorksheet('Movement Details');
+    
+    const detailHeaders = [
+      'Trunk ID', 'Route Ref', 'Direction', 'Contractor', 'Origin', 'Destination',
+      'Sched Dep', 'Actual Dep', 'Dep Variance', 'Sched Arr', 'Gate Arrival', 'Arr Variance',
+      'Dock Time', 'Tip Start', 'Tip Complete', 'Status'
+    ];
+    
+    detailHeaders.forEach((header, idx) => {
+      const cell = detailSheet.getCell(1, idx + 1);
+      cell.value = header;
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0099CC' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+    });
+    
+    movements.forEach((m, idx) => {
+      const rowNum = idx + 2;
+      const depVariance = calculateVariance(m.actual_dep, m.scheduled_dep);
+      const arrVariance = calculateVariance(m.gate_arrival, m.scheduled_arr);
+      
+      detailSheet.getCell(rowNum, 1).value = m.trunk_id;
+      detailSheet.getCell(rowNum, 2).value = m.route_ref;
+      detailSheet.getCell(rowNum, 3).value = m.direction;
+      detailSheet.getCell(rowNum, 4).value = m.contractor;
+      detailSheet.getCell(rowNum, 5).value = m.origin;
+      detailSheet.getCell(rowNum, 6).value = m.destination;
+      detailSheet.getCell(rowNum, 7).value = m.scheduled_dep;
+      detailSheet.getCell(rowNum, 8).value = m.actual_dep;
+      detailSheet.getCell(rowNum, 9).value = depVariance;
+      detailSheet.getCell(rowNum, 10).value = m.scheduled_arr;
+      detailSheet.getCell(rowNum, 11).value = m.gate_arrival;
+      detailSheet.getCell(rowNum, 12).value = arrVariance;
+      detailSheet.getCell(rowNum, 13).value = m.dock_time;
+      detailSheet.getCell(rowNum, 14).value = m.tip_start;
+      detailSheet.getCell(rowNum, 15).value = m.tip_complete;
+      detailSheet.getCell(rowNum, 16).value = m.status;
+      
+      // Color code variances
+      if (depVariance !== null) {
+        const depCell = detailSheet.getCell(rowNum, 9);
+        depCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: depVariance <= 0 ? 'D1FAE5' : 'FEE2E2' } };
+      }
+      if (arrVariance !== null) {
+        const arrCell = detailSheet.getCell(rowNum, 12);
+        arrCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: arrVariance <= 0 ? 'D1FAE5' : 'FEE2E2' } };
+      }
+    });
+    
+    // Auto-filter
+    if (movements.length > 0) {
+      detailSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: movements.length + 1, column: detailHeaders.length }
+      };
+    }
+    
+    // Set column widths
+    detailSheet.columns = detailHeaders.map(() => ({ width: 12 }));
+    detailSheet.getColumn(4).width = 15;
+    detailSheet.getColumn(5).width = 15;
+    detailSheet.getColumn(6).width = 18;
+    
+    // ============ DELAYED MOVEMENTS SHEET ============
+    const delayedMovements = report.delayed_movements || [];
+    if (delayedMovements.length > 0) {
+      const delayedSheet = workbook.addWorksheet('Delayed Movements');
+      
+      const delayedHeaders = ['Trunk ID', 'Route Ref', 'Contractor', 'Origin', 'Destination'];
+      delayedHeaders.forEach((header, idx) => {
+        const cell = delayedSheet.getCell(1, idx + 1);
+        cell.value = header;
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DC2626' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+      });
+      
+      delayedMovements.forEach((d, idx) => {
+        const rowNum = idx + 2;
+        delayedSheet.getCell(rowNum, 1).value = d.trunkId;
+        delayedSheet.getCell(rowNum, 2).value = d.routeRef || '';
+        delayedSheet.getCell(rowNum, 3).value = d.contractor || '';
+        delayedSheet.getCell(rowNum, 4).value = d.origin;
+        delayedSheet.getCell(rowNum, 5).value = d.destination;
+      });
+      
+      delayedSheet.columns = [
+        { width: 15 }, { width: 15 }, { width: 18 }, { width: 18 }, { width: 18 }
+      ];
+    }
+    
+    // Send file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=DX_Daily_Report_${reportDate}.xlsx`);
+    
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    // Log export
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Daily Report Export', `Exported daily report: ${reportDate}`]
+    );
+    
+  } catch (err) {
+    console.error('Daily report export error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ REPORT EXPORT ENDPOINT ============
 
 app.get('/api/report/export', authenticateToken, async (req, res) => {

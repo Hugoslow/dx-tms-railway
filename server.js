@@ -393,17 +393,21 @@ app.get('/api/auth/validate', authenticateToken, (req, res) => {
 // ============ TRUNK MOVEMENTS ENDPOINTS ============
 
 // Get all today's movements (sorted by operational time: 10:30 → 10:29)
+// Operational day runs 10:30 to 10:29, so before 10:30 we show yesterday's movements
 app.get('/api/movements', authenticateToken, async (req, res) => {
   try {
+    const operationalDay = getOperationalDay(new Date());
+    
     const result = await pool.query(
       `SELECT * FROM trunk_movements 
-       WHERE movement_date = CURRENT_DATE 
+       WHERE movement_date = $1 
        ORDER BY 
          CASE 
            WHEN scheduled_dep >= '10:30' THEN 0
            ELSE 1
          END,
-         scheduled_dep ASC`
+         scheduled_dep ASC`,
+      [operationalDay]
     );
     res.json(result.rows);
   } catch (err) {
@@ -1136,6 +1140,8 @@ app.get('/api/operational-day', authenticateToken, async (req, res) => {
 
 app.get('/api/stats', authenticateToken, async (req, res) => {
   try {
+    const operationalDay = getOperationalDay(new Date());
+    
     const result = await pool.query(`
       SELECT 
         COUNT(*) FILTER (WHERE status != 'cancelled') as total,
@@ -1151,8 +1157,8 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
         COUNT(*) FILTER (WHERE status = 'delayed') as delayed,
         COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled
       FROM trunk_movements
-      WHERE movement_date = CURRENT_DATE
-    `);
+      WHERE movement_date = $1
+    `, [operationalDay]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Stats error:', err);
@@ -1266,8 +1272,11 @@ function calculateMetricsForMovements(movements) {
 
 app.get('/api/metrics/live', authenticateToken, async (req, res) => {
   try {
+    const operationalDay = getOperationalDay(new Date());
+    
     const result = await pool.query(
-      `SELECT * FROM trunk_movements WHERE movement_date = CURRENT_DATE`
+      `SELECT * FROM trunk_movements WHERE movement_date = $1`,
+      [operationalDay]
     );
     
     const movements = result.rows;
@@ -1285,7 +1294,7 @@ app.get('/api/metrics/live', authenticateToken, async (req, res) => {
     });
     
     res.json({
-      date: new Date().toISOString().split('T')[0],
+      date: operationalDay,
       network: networkMetrics,
       hubs: hubMetrics
     });

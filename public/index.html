@@ -1535,10 +1535,12 @@
             if (newDate !== today) {
                 dateSelector.classList.add('ring-2', 'ring-amber-400');
                 // Update title to show schedule view for past/future
-                document.getElementById('scheduleTitle')?.textContent = `Schedule for ${formatDate(newDate)}`;
+                const schedTitle = document.getElementById('scheduleTitle');
+                if (schedTitle) schedTitle.textContent = `Schedule for ${formatDate(newDate)}`;
             } else {
                 dateSelector.classList.remove('ring-2', 'ring-amber-400');
-                document.getElementById('scheduleTitle')?.textContent = "Today's Schedule";
+                const schedTitle = document.getElementById('scheduleTitle');
+                if (schedTitle) schedTitle.textContent = "Today's Schedule";
             }
             
             await refreshData();

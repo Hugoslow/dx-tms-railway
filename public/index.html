@@ -198,6 +198,7 @@
                             <option value="gatehouse">Gatehouse</option>
                             <option value="hub-ops">Hub Operations</option>
                             <option value="supervisor">Supervisor</option>
+                            <option value="planner">Planner</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
@@ -420,6 +421,71 @@
         </div>
     </div>
 
+    <!-- Copy Date Modal -->
+    <div id="copyDateModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-amber-500 px-6 py-4 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="copy" class="w-5 h-5"></i>Copy Historical Date</h2>
+                <button onclick="closeCopyDateModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-slate-600 text-sm">Copy all movements from a past date to a future date. This will include all amendments made on that day.</p>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Source Date (Historical)</label>
+                    <input type="date" id="copySourceDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <p class="text-xs text-slate-500 mt-1">Select a past date to copy from</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Target Date (Future)</label>
+                    <input type="date" id="copyTargetDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                    <p class="text-xs text-slate-500 mt-1">Select a future date to copy to</p>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                    <p class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4"></i>This will overwrite any existing movements for the target date.</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeCopyDateModal()" class="flex-1 py-3 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                    <button onclick="executeCopyDate()" class="flex-1 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600">Copy Date</button>
+                </div>
+                <p id="copyDateError" class="text-red-600 text-sm text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Route Legs Modal -->
+    <div id="routeLegsModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden">
+            <div class="bg-indigo-500 px-6 py-4 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="route" class="w-5 h-5"></i>Route Legs: <span id="routeLegsTitle"></span></h2>
+                <button onclick="closeRouteLegsModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6">
+                <p class="text-slate-600 text-sm mb-4">All legs of this route displayed in departure order. This shows the journey progression.</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200">
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Leg</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Trunk ID</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Origin</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Destination</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Sched Dep</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actual Dep</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">ETA</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Arrival</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routeLegsBody"></tbody>
+                    </table>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button onclick="closeRouteLegsModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main App -->
     <div id="mainApp" class="hidden">
         <header class="dx-header text-white shadow-lg sticky top-0 z-40">
@@ -454,6 +520,13 @@
                 </div>
             </div>
             <div class="px-4 py-2 bg-black/20 flex items-center gap-6 overflow-x-auto">
+                <div id="dateSelectorContainer" class="flex items-center gap-2 text-sm whitespace-nowrap">
+                    <i data-lucide="calendar" class="w-4 h-4 text-blue-200"></i>
+                    <input type="date" id="dateSelector" onchange="changeDate()" class="bg-white/10 border border-white/20 rounded px-2 py-1 text-white text-sm" title="Select date">
+                    <button onclick="goToToday()" class="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-xs" title="Go to today">Today</button>
+                    <button id="copyDateBtn" onclick="openCopyDateModal()" class="hidden px-2 py-1 bg-amber-500/80 hover:bg-amber-500 rounded text-xs" title="Copy from historical date"><i data-lucide="copy" class="w-3 h-3 inline"></i> Copy</button>
+                </div>
+                <span class="text-blue-300">|</span>
                 <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Total:</span><span id="statTotal" class="font-semibold">0</span></div>
                 <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Inbound:</span><span id="statInbound" class="font-semibold text-blue-300">0</span></div>
                 <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Outbound:</span><span id="statOutbound" class="font-semibold text-orange-300">0</span></div>
@@ -501,6 +574,7 @@
                         <h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="monitor" class="w-5 h-5"></i>Live Trunk Board <span class="text-slate-400 font-normal text-sm" id="liveBoardCount"></span></h3>
                         <div class="flex flex-wrap items-center gap-3">
                             <input type="text" id="liveBoardSearch" placeholder="Search..." oninput="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm w-32">
+                            <select id="liveBoardRouteFilter" onchange="filterByRoute()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Routes</option></select>
                             <select id="liveBoardHubFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Hubs</option></select>
                             <select id="liveBoardStatusFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Statuses</option></select>
                             <select id="liveBoardDirectionFilter" onchange="renderLiveBoard()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Directions</option><option value="INBOUND">Inbound</option><option value="OUTBOUND">Outbound</option><option value="TRANSFER">Transfer</option></select>
@@ -854,25 +928,30 @@
         let lastActivity = Date.now();
         let sessionWarningTimeout = null;
         let sessionLogoutTimeout = null;
+        let selectedDate = null; // Current selected date
+        let datePermissions = null; // User's date access permissions
+        let routeFilter = ''; // Current route reference filter
         const SESSION_WARNING_TIME = 25 * 60 * 1000; // 25 minutes
         const SESSION_LOGOUT_TIME = 30 * 60 * 1000;  // 30 minutes
         
         const hubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
         const rolePermissions = { 
-            'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false,
+            'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false,
                 tabs: ['dashboard', 'live-board', 'schedule'] },
-            'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true,
+            'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure'] },
-            'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false,
+            'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false,
                 tabs: ['schedule', 'hub-arrival'] },
-            'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true,
+            'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'hub-arrival', 'hub-operations', 'metrics'] },
-            'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true,
+            'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics'] },
-            'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true,
+            'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true,
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics'] },
+            'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true,
                 tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'users'] }
         };
-        const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'admin': 'Admin' };
+        const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'planner': 'Planner', 'admin': 'Admin' };
         function getPermissions() { return currentUser ? rolePermissions[currentUser.role] || rolePermissions['viewer'] : rolePermissions['viewer']; }
 
         // ============ API HELPER WITH AUTH ============
@@ -1166,6 +1245,7 @@
             document.getElementById('displayRole').textContent = roleLabels[currentUser.role];
             
             applyRolePermissions();
+            initializeDateSelector(); // Initialize date selector based on role
             resetActivityTimer();
             refreshData();
             
@@ -1367,10 +1447,13 @@
             if (icon) icon.classList.add('refresh-indicator');
             
             try {
-                movements = await api('/movements');
+                // Build URL with date parameter if selected
+                const dateParam = selectedDate ? `?date=${selectedDate}` : '';
+                movements = await api(`/movements${dateParam}`);
                 auditLog = await api('/audit?limit=50');
                 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-GB');
+                updateRouteRefFilter(); // Update route reference dropdown
                 renderAll();
             } catch (err) {
                 console.error('Refresh error:', err);
@@ -1393,6 +1476,219 @@
             renderHubOperations();
             renderAuditLog();
             lucide.createIcons();
+        }
+
+        // ============ DATE NAVIGATION ============
+        async function initializeDateSelector() {
+            try {
+                // Get user's date permissions
+                datePermissions = await api('/date-permissions');
+                selectedDate = datePermissions.today;
+                
+                const dateSelector = document.getElementById('dateSelector');
+                const copyBtn = document.getElementById('copyDateBtn');
+                
+                // Set initial date value
+                dateSelector.value = selectedDate;
+                
+                // Configure date picker based on permissions
+                const perms = getPermissions();
+                
+                if (!perms.canViewPast && !perms.canViewFuture) {
+                    // Today only - disable date picker
+                    dateSelector.disabled = true;
+                    dateSelector.title = 'Date selection not available for your role';
+                } else {
+                    dateSelector.disabled = false;
+                    
+                    // Set min/max based on permissions
+                    if (!perms.canViewPast) {
+                        dateSelector.min = datePermissions.today;
+                    }
+                    // Future is unlimited if allowed
+                }
+                
+                // Show/hide copy button
+                if (perms.canCopyDates) {
+                    copyBtn.classList.remove('hidden');
+                } else {
+                    copyBtn.classList.add('hidden');
+                }
+                
+            } catch (err) {
+                console.error('Error initializing date selector:', err);
+            }
+        }
+        
+        async function changeDate() {
+            const dateSelector = document.getElementById('dateSelector');
+            const newDate = dateSelector.value;
+            
+            if (!newDate) return;
+            
+            selectedDate = newDate;
+            
+            // Visual indicator that we're viewing a different date
+            const perms = getPermissions();
+            const today = datePermissions?.today;
+            
+            if (newDate !== today) {
+                dateSelector.classList.add('ring-2', 'ring-amber-400');
+                // Update title to show schedule view for past/future
+                document.getElementById('scheduleTitle')?.textContent = `Schedule for ${formatDate(newDate)}`;
+            } else {
+                dateSelector.classList.remove('ring-2', 'ring-amber-400');
+                document.getElementById('scheduleTitle')?.textContent = "Today's Schedule";
+            }
+            
+            await refreshData();
+        }
+        
+        function goToToday() {
+            const dateSelector = document.getElementById('dateSelector');
+            if (datePermissions?.today) {
+                dateSelector.value = datePermissions.today;
+                changeDate();
+            }
+        }
+        
+        function formatDate(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        }
+
+        // ============ ROUTE REFERENCE FILTER ============
+        function updateRouteRefFilter() {
+            // Get unique route references that have multiple legs
+            const routeCounts = {};
+            movements.forEach(m => {
+                if (m.route_ref) {
+                    routeCounts[m.route_ref] = (routeCounts[m.route_ref] || 0) + 1;
+                }
+            });
+            
+            // Filter to only routes with multiple legs
+            const multiLegRoutes = Object.entries(routeCounts)
+                .filter(([ref, count]) => count > 1)
+                .sort((a, b) => a[0].localeCompare(b[0]));
+            
+            const routeSelect = document.getElementById('liveBoardRouteFilter');
+            if (routeSelect) {
+                const currentValue = routeSelect.value;
+                routeSelect.innerHTML = '<option value="">All Routes</option>' + 
+                    multiLegRoutes.map(([ref, count]) => 
+                        `<option value="${ref}" ${ref === currentValue ? 'selected' : ''}>${ref} (${count} legs)</option>`
+                    ).join('');
+            }
+        }
+        
+        async function filterByRoute() {
+            const routeSelect = document.getElementById('liveBoardRouteFilter');
+            routeFilter = routeSelect.value;
+            
+            if (routeFilter) {
+                // Open modal showing all legs for this route
+                await showRouteLegs(routeFilter);
+            }
+            
+            renderLiveBoard();
+        }
+        
+        async function showRouteLegs(routeRef) {
+            try {
+                const dateParam = selectedDate ? `?date=${selectedDate}` : '';
+                const data = await api(`/movements/route/${encodeURIComponent(routeRef)}${dateParam}`);
+                
+                document.getElementById('routeLegsTitle').textContent = routeRef;
+                
+                const tbody = document.getElementById('routeLegsBody');
+                tbody.innerHTML = data.legs.map((leg, idx) => `
+                    <tr class="border-b border-slate-100 ${leg.status === 'cancelled' ? 'opacity-50' : ''}">
+                        <td class="px-3 py-2 font-semibold">${idx + 1}</td>
+                        <td class="px-3 py-2 font-mono">${leg.trunk_id}</td>
+                        <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${leg.status}">${leg.status}</span></td>
+                        <td class="px-3 py-2">${leg.origin}</td>
+                        <td class="px-3 py-2">${leg.destination}</td>
+                        <td class="px-3 py-2 font-mono">${leg.scheduled_dep || '—'}</td>
+                        <td class="px-3 py-2 font-mono ${leg.actual_dep ? 'text-blue-600' : ''}">${leg.actual_dep || '—'}</td>
+                        <td class="px-3 py-2 font-mono">${leg.scheduled_arr || '—'}</td>
+                        <td class="px-3 py-2 font-mono ${leg.gate_arrival ? 'text-green-600' : ''}">${leg.gate_arrival || '—'}</td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('routeLegsModal').classList.remove('hidden');
+                lucide.createIcons();
+            } catch (err) {
+                console.error('Error loading route legs:', err);
+                showToast('Failed to load route legs', 'error');
+            }
+        }
+        
+        function closeRouteLegsModal() {
+            document.getElementById('routeLegsModal').classList.add('hidden');
+        }
+
+        // ============ COPY DATE FUNCTIONS ============
+        function openCopyDateModal() {
+            const today = datePermissions?.today;
+            
+            // Set up date inputs
+            const sourceInput = document.getElementById('copySourceDate');
+            const targetInput = document.getElementById('copyTargetDate');
+            
+            // Source must be in the past
+            if (today) {
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                sourceInput.max = yesterday.toISOString().split('T')[0];
+                
+                // Default source to yesterday
+                sourceInput.value = yesterday.toISOString().split('T')[0];
+                
+                // Target must be in the future
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                targetInput.min = tomorrow.toISOString().split('T')[0];
+                targetInput.value = tomorrow.toISOString().split('T')[0];
+            }
+            
+            document.getElementById('copyDateError').classList.add('hidden');
+            document.getElementById('copyDateModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        
+        function closeCopyDateModal() {
+            document.getElementById('copyDateModal').classList.add('hidden');
+        }
+        
+        async function executeCopyDate() {
+            const sourceDate = document.getElementById('copySourceDate').value;
+            const targetDate = document.getElementById('copyTargetDate').value;
+            const errorEl = document.getElementById('copyDateError');
+            
+            if (!sourceDate || !targetDate) {
+                errorEl.textContent = 'Please select both dates';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                const result = await api('/copy-date', {
+                    method: 'POST',
+                    body: { sourceDate, targetDate }
+                });
+                
+                closeCopyDateModal();
+                showToast(`Copied ${result.movementsCopied} movements from ${sourceDate} to ${targetDate}`);
+                
+                // If we're viewing the target date, refresh
+                if (selectedDate === targetDate) {
+                    await refreshData();
+                }
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.classList.remove('hidden');
+            }
         }
         
         function updateDepotOriginFilter() {
@@ -1459,6 +1755,7 @@
             const hub = document.getElementById('liveBoardHubFilter')?.value || '';
             const status = document.getElementById('liveBoardStatusFilter')?.value || '';
             const direction = document.getElementById('liveBoardDirectionFilter')?.value || '';
+            const route = document.getElementById('liveBoardRouteFilter')?.value || '';
             const hideCancelled = document.getElementById('hideCancelled')?.checked;
             const perms = getPermissions();
             
@@ -1468,6 +1765,7 @@
                 if (hub && t.destination !== hub) return false;
                 if (status && t.status !== status) return false;
                 if (direction && t.direction !== direction) return false;
+                if (route && t.route_ref !== route) return false;
                 return true;
             });
             
@@ -1489,7 +1787,18 @@
             }
             
             document.getElementById('liveBoardCount').textContent = `(${filtered.length})`;
-            document.getElementById('liveBoardBody').innerHTML = filtered.map(t => `<tr class="border-b border-slate-100 hover:bg-slate-50 ${t.status === 'cancelled' ? 'opacity-50' : ''}"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td><td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded direction-${(t.direction || '').toLowerCase()}">${t.direction || ''}</span></td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2">${t.destination}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td><td class="px-3 py-2 col-actions ${perms.canManageTrunks ? '' : 'hidden'}">${t.status !== 'cancelled' && ['scheduled', 'loading'].includes(t.status) ? `<button onclick="cancelTrunk(${t.id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200">Cancel</button>` : '—'}</td></tr>`).join('');
+            document.getElementById('liveBoardBody').innerHTML = filtered.map(t => {
+                // Check if this route has multiple legs (clickable)
+                const routeClickable = t.route_ref && movements.filter(m => m.route_ref === t.route_ref).length > 1;
+                const routeCell = routeClickable 
+                    ? `<td class="px-3 py-2 font-mono text-indigo-600 cursor-pointer hover:underline" onclick="showRouteLegs('${t.route_ref}')" title="Click to view all legs">${t.route_ref}</td>`
+                    : `<td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td>`;
+                
+                // Check if this is an amended movement
+                const amendedBadge = t.is_amendment ? `<span class="ml-1 px-1 py-0.5 text-xs bg-amber-100 text-amber-700 rounded" title="${t.amendment_note || 'Amended'}">A</span>` : '';
+                
+                return `<tr class="border-b border-slate-100 hover:bg-slate-50 ${t.status === 'cancelled' ? 'opacity-50' : ''}"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}${amendedBadge}</td>${routeCell}<td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td><td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded direction-${(t.direction || '').toLowerCase()}">${t.direction || ''}</span></td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2">${t.destination}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td><td class="px-3 py-2 col-actions ${perms.canManageTrunks ? '' : 'hidden'}">${t.status !== 'cancelled' && ['scheduled', 'loading'].includes(t.status) ? `<button onclick="cancelTrunk(${t.id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200">Cancel</button>` : '—'}</td></tr>`;
+            }).join('');
         }
 
         function renderSchedule() {

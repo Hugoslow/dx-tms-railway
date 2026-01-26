@@ -167,13 +167,29 @@ function authenticateToken(req, res, next) {
 // ============ ROLE-BASED ACCESS CONTROL ============
 
 const rolePermissions = {
-  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false },
-  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true },
-  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false },
-  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true },
-  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true },
-  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true }
+  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false },
+  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false },
+  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false },
+  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false },
+  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false },
+  'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true },
+  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true }
 };
+
+// Date access validation helper
+function canAccessDate(userRole, requestedDate) {
+  const perms = rolePermissions[userRole];
+  if (!perms) return false;
+  
+  const today = getOperationalDay(new Date());
+  const reqDate = requestedDate;
+  
+  if (reqDate === today) return true; // Everyone can view today
+  if (reqDate < today) return perms.canViewPast; // Past dates
+  if (reqDate > today) return perms.canViewFuture; // Future dates
+  
+  return false;
+}
 
 function requirePermission(permission) {
   return (req, res, next) => {
@@ -392,11 +408,35 @@ app.get('/api/auth/validate', authenticateToken, (req, res) => {
 
 // ============ TRUNK MOVEMENTS ENDPOINTS ============
 
-// Get all today's movements (sorted by operational time: 10:30 → 10:29)
-// Operational day runs 10:30 to 10:29, so before 10:30 we show yesterday's movements
+// Get movements for a specific date (defaults to today's operational day)
+// Supports past, present, and future dates based on role permissions
 app.get('/api/movements', authenticateToken, async (req, res) => {
   try {
-    const operationalDay = getOperationalDay(new Date());
+    const today = getOperationalDay(new Date());
+    const requestedDate = req.query.date || today;
+    
+    // Check if user has permission to access this date
+    if (!canAccessDate(req.user.role, requestedDate)) {
+      return res.status(403).json({ 
+        error: 'Permission denied: You do not have access to this date',
+        allowedDates: {
+          past: rolePermissions[req.user.role].canViewPast,
+          today: true,
+          future: rolePermissions[req.user.role].canViewFuture
+        }
+      });
+    }
+    
+    // Check if movements exist for this date
+    const existingMovements = await pool.query(
+      'SELECT COUNT(*) FROM trunk_movements WHERE movement_date = $1',
+      [requestedDate]
+    );
+    
+    // If future date with no movements, generate from schedule + amendments
+    if (parseInt(existingMovements.rows[0].count) === 0 && requestedDate > today) {
+      await generateMovementsForDate(requestedDate);
+    }
     
     const result = await pool.query(
       `SELECT * FROM trunk_movements 
@@ -407,11 +447,415 @@ app.get('/api/movements', authenticateToken, async (req, res) => {
            ELSE 1
          END,
          scheduled_dep ASC`,
-      [operationalDay]
+      [requestedDate]
     );
     res.json(result.rows);
   } catch (err) {
     console.error('Get movements error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Helper function to generate movements for a future date
+async function generateMovementsForDate(targetDate) {
+  try {
+    // Get base schedule
+    const schedule = await pool.query(
+      'SELECT * FROM trunk_schedule WHERE active = true'
+    );
+    
+    // Get amendments for this date
+    const amendments = await pool.query(
+      'SELECT * FROM schedule_amendments WHERE amendment_date = $1',
+      [targetDate]
+    );
+    
+    const amendmentMap = {};
+    amendments.rows.forEach(a => {
+      amendmentMap[a.trunk_id] = a;
+    });
+    
+    // Insert movements based on schedule + amendments
+    for (const trunk of schedule.rows) {
+      const amendment = amendmentMap[trunk.trunk_id];
+      
+      // Skip if cancelled by amendment
+      if (amendment && amendment.amendment_type === 'cancel') {
+        continue;
+      }
+      
+      // Use amended values if available, otherwise use schedule values
+      const values = amendment && amendment.amendment_type === 'modify' ? {
+        trunk_id: trunk.trunk_id,
+        route_ref: amendment.new_route_ref || trunk.route_ref,
+        contractor: amendment.new_contractor || trunk.contractor,
+        vehicle_type: amendment.new_vehicle_type || trunk.vehicle_type,
+        origin: amendment.new_origin || trunk.origin,
+        destination: amendment.new_destination || trunk.destination,
+        scheduled_dep: amendment.new_scheduled_dep || trunk.scheduled_dep,
+        scheduled_arr: amendment.new_scheduled_arr || trunk.scheduled_arr,
+        direction: amendment.new_direction || trunk.direction,
+        is_amendment: true,
+        amendment_note: amendment.reason
+      } : {
+        trunk_id: trunk.trunk_id,
+        route_ref: trunk.route_ref,
+        contractor: trunk.contractor,
+        vehicle_type: trunk.vehicle_type,
+        origin: trunk.origin,
+        destination: trunk.destination,
+        scheduled_dep: trunk.scheduled_dep,
+        scheduled_arr: trunk.scheduled_arr,
+        direction: trunk.direction,
+        is_amendment: false,
+        amendment_note: null
+      };
+      
+      await pool.query(
+        `INSERT INTO trunk_movements 
+         (trunk_id, route_ref, contractor, vehicle_type, origin, destination,
+          scheduled_dep, scheduled_arr, direction, status, movement_date, is_amendment, amendment_note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'scheduled', $10, $11, $12)
+         ON CONFLICT DO NOTHING`,
+        [values.trunk_id, values.route_ref, values.contractor, values.vehicle_type,
+         values.origin, values.destination, values.scheduled_dep, values.scheduled_arr,
+         values.direction, targetDate, values.is_amendment, values.amendment_note]
+      );
+    }
+    
+    // Add any new trunks from amendments
+    for (const amendment of amendments.rows) {
+      if (amendment.amendment_type === 'add') {
+        await pool.query(
+          `INSERT INTO trunk_movements 
+           (trunk_id, route_ref, contractor, vehicle_type, origin, destination,
+            scheduled_dep, scheduled_arr, direction, status, movement_date, is_amendment, amendment_note)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'scheduled', $10, true, $11)
+           ON CONFLICT DO NOTHING`,
+          [amendment.trunk_id, amendment.new_route_ref, amendment.new_contractor,
+           amendment.new_vehicle_type, amendment.new_origin, amendment.new_destination,
+           amendment.new_scheduled_dep, amendment.new_scheduled_arr, amendment.new_direction,
+           targetDate, amendment.reason]
+        );
+      }
+    }
+    
+    console.log(`Generated movements for ${targetDate}`);
+  } catch (err) {
+    console.error('Error generating movements:', err);
+  }
+}
+
+// Get date access permissions for current user
+app.get('/api/date-permissions', authenticateToken, (req, res) => {
+  const perms = rolePermissions[req.user.role];
+  const today = getOperationalDay(new Date());
+  
+  res.json({
+    today: today,
+    canViewPast: perms?.canViewPast || false,
+    canViewFuture: perms?.canViewFuture || false,
+    canCopyDates: perms?.canCopyDates || false,
+    role: req.user.role
+  });
+});
+
+// Get available dates with movement data
+app.get('/api/available-dates', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT movement_date FROM trunk_movements 
+       ORDER BY movement_date DESC`
+    );
+    res.json(result.rows.map(r => r.movement_date.toISOString().split('T')[0]));
+  } catch (err) {
+    console.error('Available dates error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ ROUTE REFERENCE SEARCH ============
+// Search for all movements/legs sharing the same route reference
+app.get('/api/movements/route/:routeRef', authenticateToken, async (req, res) => {
+  try {
+    const { routeRef } = req.params;
+    const { date } = req.query;
+    const targetDate = date || getOperationalDay(new Date());
+    
+    // Check date access
+    if (!canAccessDate(req.user.role, targetDate)) {
+      return res.status(403).json({ error: 'Permission denied for this date' });
+    }
+    
+    const result = await pool.query(
+      `SELECT * FROM trunk_movements 
+       WHERE route_ref = $1 AND movement_date = $2
+       ORDER BY scheduled_dep ASC`,
+      [routeRef, targetDate]
+    );
+    
+    res.json({
+      routeRef: routeRef,
+      date: targetDate,
+      legCount: result.rows.length,
+      legs: result.rows
+    });
+  } catch (err) {
+    console.error('Route reference search error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get unique route references for a given date
+app.get('/api/route-refs', authenticateToken, async (req, res) => {
+  try {
+    const { date } = req.query;
+    const targetDate = date || getOperationalDay(new Date());
+    
+    const result = await pool.query(
+      `SELECT DISTINCT route_ref, COUNT(*) as leg_count 
+       FROM trunk_movements 
+       WHERE movement_date = $1 AND route_ref IS NOT NULL AND route_ref != ''
+       GROUP BY route_ref
+       HAVING COUNT(*) > 1
+       ORDER BY route_ref`,
+      [targetDate]
+    );
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get route refs error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ COPY HISTORICAL DATE ============
+// Copy all movements + amendments from a historical date to a future date
+app.post('/api/copy-date', authenticateToken, async (req, res) => {
+  try {
+    const { sourceDate, targetDate } = req.body;
+    const perms = rolePermissions[req.user.role];
+    
+    // Check permission
+    if (!perms.canCopyDates) {
+      return res.status(403).json({ error: 'Permission denied: cannot copy dates' });
+    }
+    
+    const today = getOperationalDay(new Date());
+    
+    // Validate source is in the past
+    if (sourceDate >= today) {
+      return res.status(400).json({ error: 'Source date must be in the past' });
+    }
+    
+    // Validate target is in the future
+    if (targetDate <= today) {
+      return res.status(400).json({ error: 'Target date must be in the future' });
+    }
+    
+    // Check if source date has movements
+    const sourceMovements = await pool.query(
+      'SELECT * FROM trunk_movements WHERE movement_date = $1',
+      [sourceDate]
+    );
+    
+    if (sourceMovements.rows.length === 0) {
+      return res.status(404).json({ error: 'No movements found for source date' });
+    }
+    
+    // Clear any existing movements for target date
+    await pool.query('DELETE FROM trunk_movements WHERE movement_date = $1', [targetDate]);
+    
+    // Clear any existing amendments for target date
+    await pool.query('DELETE FROM schedule_amendments WHERE amendment_date = $1', [targetDate]);
+    
+    // Copy movements to target date (reset operational fields)
+    let copied = 0;
+    for (const m of sourceMovements.rows) {
+      await pool.query(
+        `INSERT INTO trunk_movements 
+         (trunk_id, route_ref, contractor, vehicle_type, origin, destination,
+          scheduled_dep, scheduled_arr, direction, status, movement_date, is_amendment, amendment_note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'scheduled', $10, $11, $12)`,
+        [m.trunk_id, m.route_ref, m.contractor, m.vehicle_type, m.origin, m.destination,
+         m.scheduled_dep, m.scheduled_arr, m.direction, targetDate, 
+         m.is_amendment, m.amendment_note ? `Copied from ${sourceDate}: ${m.amendment_note}` : `Copied from ${sourceDate}`]
+      );
+      copied++;
+    }
+    
+    // Log the copy action
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Date Copy', `Copied ${copied} movements from ${sourceDate} to ${targetDate}`]
+    );
+    
+    res.json({
+      message: 'Date copied successfully',
+      sourceDate,
+      targetDate,
+      movementsCopied: copied
+    });
+  } catch (err) {
+    console.error('Copy date error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ SCHEDULE AMENDMENTS ============
+
+// Get amendments for a date
+app.get('/api/amendments', authenticateToken, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'Date parameter required' });
+    }
+    
+    const result = await pool.query(
+      'SELECT * FROM schedule_amendments WHERE amendment_date = $1 ORDER BY created_at DESC',
+      [date]
+    );
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get amendments error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create amendment for a specific date
+app.post('/api/amendments', authenticateToken, requirePermission('canAmendTrunk'), async (req, res) => {
+  try {
+    const { 
+      amendment_date, trunk_id, amendment_type, reason,
+      new_contractor, new_vehicle_type, new_origin, new_destination,
+      new_scheduled_dep, new_scheduled_arr, new_direction, new_route_ref
+    } = req.body;
+    
+    const today = getOperationalDay(new Date());
+    
+    // Check date access
+    if (!canAccessDate(req.user.role, amendment_date)) {
+      return res.status(403).json({ error: 'Permission denied for this date' });
+    }
+    
+    // For modifications, get original values
+    let originalValues = {};
+    if (amendment_type === 'modify' || amendment_type === 'cancel') {
+      const original = await pool.query(
+        'SELECT * FROM trunk_schedule WHERE trunk_id = $1',
+        [trunk_id]
+      );
+      if (original.rows.length > 0) {
+        const o = original.rows[0];
+        originalValues = {
+          original_contractor: o.contractor,
+          original_vehicle_type: o.vehicle_type,
+          original_origin: o.origin,
+          original_destination: o.destination,
+          original_scheduled_dep: o.scheduled_dep,
+          original_scheduled_arr: o.scheduled_arr,
+          original_direction: o.direction
+        };
+      }
+    }
+    
+    // Insert or update amendment
+    const result = await pool.query(
+      `INSERT INTO schedule_amendments 
+       (amendment_date, trunk_id, amendment_type, reason, created_by,
+        original_contractor, original_vehicle_type, original_origin, original_destination,
+        original_scheduled_dep, original_scheduled_arr, original_direction,
+        new_contractor, new_vehicle_type, new_origin, new_destination,
+        new_scheduled_dep, new_scheduled_arr, new_direction, new_route_ref)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       ON CONFLICT (amendment_date, trunk_id) 
+       DO UPDATE SET 
+         amendment_type = EXCLUDED.amendment_type,
+         reason = EXCLUDED.reason,
+         new_contractor = EXCLUDED.new_contractor,
+         new_vehicle_type = EXCLUDED.new_vehicle_type,
+         new_origin = EXCLUDED.new_origin,
+         new_destination = EXCLUDED.new_destination,
+         new_scheduled_dep = EXCLUDED.new_scheduled_dep,
+         new_scheduled_arr = EXCLUDED.new_scheduled_arr,
+         new_direction = EXCLUDED.new_direction,
+         new_route_ref = EXCLUDED.new_route_ref,
+         created_at = NOW()
+       RETURNING *`,
+      [amendment_date, trunk_id, amendment_type, reason, req.user.fullName,
+       originalValues.original_contractor, originalValues.original_vehicle_type,
+       originalValues.original_origin, originalValues.original_destination,
+       originalValues.original_scheduled_dep, originalValues.original_scheduled_arr,
+       originalValues.original_direction,
+       new_contractor, new_vehicle_type, new_origin, new_destination,
+       new_scheduled_dep, new_scheduled_arr, new_direction, new_route_ref]
+    );
+    
+    // If movements already exist for this date, update them
+    if (amendment_type === 'modify') {
+      await pool.query(
+        `UPDATE trunk_movements SET
+         contractor = COALESCE($1, contractor),
+         vehicle_type = COALESCE($2, vehicle_type),
+         origin = COALESCE($3, origin),
+         destination = COALESCE($4, destination),
+         scheduled_dep = COALESCE($5, scheduled_dep),
+         scheduled_arr = COALESCE($6, scheduled_arr),
+         direction = COALESCE($7, direction),
+         route_ref = COALESCE($8, route_ref),
+         is_amendment = true,
+         amendment_note = $9,
+         updated_at = NOW()
+         WHERE trunk_id = $10 AND movement_date = $11`,
+        [new_contractor, new_vehicle_type, new_origin, new_destination,
+         new_scheduled_dep, new_scheduled_arr, new_direction, new_route_ref,
+         reason, trunk_id, amendment_date]
+      );
+    } else if (amendment_type === 'cancel') {
+      await pool.query(
+        `UPDATE trunk_movements SET status = 'cancelled', cancel_reason = $1, 
+         is_amendment = true, amendment_note = $1, updated_at = NOW()
+         WHERE trunk_id = $2 AND movement_date = $3`,
+        [reason, trunk_id, amendment_date]
+      );
+    }
+    
+    // Log the amendment
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details, trunk_id) VALUES ($1, $2, $3, $4)',
+      [req.user.fullName, `Amendment: ${amendment_type}`, `${trunk_id} for ${amendment_date}: ${reason || 'No reason given'}`, trunk_id]
+    );
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create amendment error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete amendment
+app.delete('/api/amendments/:id', authenticateToken, requirePermission('canAmendTrunk'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM schedule_amendments WHERE id = $1 RETURNING *',
+      [req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Amendment not found' });
+    }
+    
+    // Log deletion
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details, trunk_id) VALUES ($1, $2, $3, $4)',
+      [req.user.fullName, 'Amendment Deleted', `Removed amendment for ${result.rows[0].amendment_date}`, result.rows[0].trunk_id]
+    );
+    
+    res.json({ message: 'Amendment deleted', amendment: result.rows[0] });
+  } catch (err) {
+    console.error('Delete amendment error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

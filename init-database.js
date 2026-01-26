@@ -8,7 +8,7 @@ const pool = new Pool({
 });
 
 async function initDatabase() {
-  console.log('Initializing database with security features...');
+  console.log('Initializing database with security features and planning support...');
   
   try {
     // Create tables
@@ -57,7 +57,7 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
-      -- Trunk Movements (daily live data)
+      -- Trunk Movements (daily live data - supports past, present, and future dates)
       CREATE TABLE IF NOT EXISTS trunk_movements (
         id SERIAL PRIMARY KEY,
         trunk_id VARCHAR(20) NOT NULL,
@@ -85,8 +85,41 @@ async function initDatabase() {
         cages INTEGER DEFAULT 0,
         cancel_reason VARCHAR(100),
         movement_date DATE DEFAULT CURRENT_DATE,
+        is_amendment BOOLEAN DEFAULT false,
+        amendment_note TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Schedule Amendments (date-specific changes to the master schedule)
+      -- Used for planning future dates and tracking changes
+      CREATE TABLE IF NOT EXISTS schedule_amendments (
+        id SERIAL PRIMARY KEY,
+        amendment_date DATE NOT NULL,
+        trunk_id VARCHAR(20) NOT NULL,
+        amendment_type VARCHAR(20) NOT NULL, -- 'modify', 'add', 'cancel'
+        -- Original values (for modify/cancel)
+        original_contractor VARCHAR(50),
+        original_vehicle_type VARCHAR(20),
+        original_origin VARCHAR(100),
+        original_destination VARCHAR(100),
+        original_scheduled_dep VARCHAR(5),
+        original_scheduled_arr VARCHAR(5),
+        original_direction VARCHAR(20),
+        -- New/amended values
+        new_contractor VARCHAR(50),
+        new_vehicle_type VARCHAR(20),
+        new_origin VARCHAR(100),
+        new_destination VARCHAR(100),
+        new_scheduled_dep VARCHAR(5),
+        new_scheduled_arr VARCHAR(5),
+        new_direction VARCHAR(20),
+        new_route_ref VARCHAR(20),
+        -- Metadata
+        reason TEXT,
+        created_by VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(amendment_date, trunk_id)
       );
 
       -- Audit Log
@@ -103,20 +136,25 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_movements_date ON trunk_movements(movement_date);
       CREATE INDEX IF NOT EXISTS idx_movements_status ON trunk_movements(status);
       CREATE INDEX IF NOT EXISTS idx_movements_destination ON trunk_movements(destination);
+      CREATE INDEX IF NOT EXISTS idx_movements_route_ref ON trunk_movements(route_ref);
       CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_amendments_date ON schedule_amendments(amendment_date);
+      CREATE INDEX IF NOT EXISTS idx_amendments_trunk ON schedule_amendments(trunk_id);
     `);
     
     console.log('Tables created successfully');
 
-    // Add new columns to existing users table if they don't exist
+    // Add new columns to existing tables if they don't exist
     const alterQueries = [
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN DEFAULT false",
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0",
       "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP",
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+      "ALTER TABLE trunk_movements ADD COLUMN IF NOT EXISTS is_amendment BOOLEAN DEFAULT false",
+      "ALTER TABLE trunk_movements ADD COLUMN IF NOT EXISTS amendment_note TEXT"
     ];
     
     for (const query of alterQueries) {
@@ -126,7 +164,7 @@ async function initDatabase() {
         // Column might already exist, ignore error
       }
     }
-    console.log('Security columns added to users table');
+    console.log('Security and planning columns added');
 
     // Check if admin user exists
     const adminCheck = await pool.query("SELECT * FROM users WHERE username = 'admin'");
@@ -168,7 +206,7 @@ async function initDatabase() {
     // Log initialization
     await pool.query(
       'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
-      ['System', 'Database Init', 'Database initialized with security features v2.0']
+      ['System', 'Database Init', 'Database initialized with security features and planning support v3.0']
     );
 
     console.log('Database initialization complete!');

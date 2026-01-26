@@ -1,7 +1,7 @@
 {
   "name": "dx-trunking-management-system",
-  "version": "2.1.0",
-  "description": "DX Trunking Management System - Real-time trunk tracking with metrics",
+  "version": "3.0.0",
+  "description": "DX Trunking Management System - Real-time trunk tracking with metrics and planning",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -527,6 +527,7 @@
                     <input type="date" id="dateSelector" onchange="changeDate()" class="bg-white/10 border border-white/20 rounded px-2 py-1 text-white text-sm" title="Select date">
                     <button onclick="goToToday()" id="goToTodayBtn" class="hidden px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-medium" title="Go to today">← Today</button>
                     <button id="copyDateBtn" onclick="openCopyDateModal()" class="hidden px-2 py-1 bg-amber-500/80 hover:bg-amber-500 rounded text-xs" title="Copy from historical date"><i data-lucide="copy" class="w-3 h-3 inline"></i> Copy</button>
+                    <button id="clearDayBtn" onclick="confirmClearDay()" class="hidden px-2 py-1 bg-red-500/80 hover:bg-red-500 rounded text-xs" title="Delete all movements for this date"><i data-lucide="trash-2" class="w-3 h-3 inline"></i> Clear Day</button>
                 </div>
                 <span class="text-blue-300">|</span>
                 <div class="flex items-center gap-2 text-sm whitespace-nowrap"><span class="text-blue-200">Total:</span><span id="statTotal" class="font-semibold">0</span></div>
@@ -1913,6 +1914,7 @@
                 
                 const dateSelector = document.getElementById('dateSelector');
                 const copyBtn = document.getElementById('copyDateBtn');
+                const clearDayBtn = document.getElementById('clearDayBtn');
                 
                 // Set initial date value
                 dateSelector.value = selectedDate;
@@ -1941,6 +1943,9 @@
                     copyBtn.classList.add('hidden');
                 }
                 
+                // Clear day button is hidden initially (only shown for future dates)
+                clearDayBtn.classList.add('hidden');
+                
             } catch (err) {
                 console.error('Error initializing date selector:', err);
             }
@@ -1958,6 +1963,8 @@
             const today = datePermissions?.today;
             const dateLabel = document.getElementById('currentDateLabel');
             const goToTodayBtn = document.getElementById('goToTodayBtn');
+            const clearDayBtn = document.getElementById('clearDayBtn');
+            const perms = getPermissions();
             
             if (newDate === today) {
                 // Viewing today
@@ -1965,6 +1972,7 @@
                 dateLabel.className = 'font-semibold text-white';
                 dateSelector.classList.remove('ring-2', 'ring-amber-400', 'ring-blue-400');
                 goToTodayBtn.classList.add('hidden');
+                clearDayBtn.classList.add('hidden'); // Never show for today
             } else if (newDate < today) {
                 // Viewing past date
                 dateLabel.textContent = `Past: ${formatDateShort(newDate)}`;
@@ -1972,6 +1980,7 @@
                 dateSelector.classList.remove('ring-amber-400');
                 dateSelector.classList.add('ring-2', 'ring-blue-400');
                 goToTodayBtn.classList.remove('hidden');
+                clearDayBtn.classList.add('hidden'); // Never show for past
             } else {
                 // Viewing future date
                 dateLabel.textContent = `Future: ${formatDateShort(newDate)}`;
@@ -1979,6 +1988,12 @@
                 dateSelector.classList.remove('ring-blue-400');
                 dateSelector.classList.add('ring-2', 'ring-amber-400');
                 goToTodayBtn.classList.remove('hidden');
+                // Show clear day button for future dates if user can copy dates (Planner/Admin)
+                if (perms.canCopyDates) {
+                    clearDayBtn.classList.remove('hidden');
+                } else {
+                    clearDayBtn.classList.add('hidden');
+                }
             }
             
             await refreshData();
@@ -1989,6 +2004,63 @@
             if (datePermissions?.today) {
                 dateSelector.value = datePermissions.today;
                 changeDate();
+            }
+        }
+        
+        async function confirmClearDay() {
+            if (!selectedDate) return;
+            
+            const today = datePermissions?.today;
+            
+            // Double-check this is a future date
+            if (selectedDate <= today) {
+                showToast('Can only clear movements for future dates', 'error');
+                return;
+            }
+            
+            // Get movement count for this date
+            const movementCount = movements.length;
+            
+            if (movementCount === 0) {
+                showToast('No movements to clear for this date', 'error');
+                return;
+            }
+            
+            // Format the date nicely for display
+            const dateDisplay = formatDate(selectedDate);
+            
+            // Show confirmation dialog
+            const confirmed = confirm(
+                `⚠️ WARNING: You are about to delete ALL movements for ${dateDisplay}.\n\n` +
+                `This will permanently delete ${movementCount} trunk movement(s).\n\n` +
+                `This action cannot be undone.\n\n` +
+                `Are you sure you want to continue?`
+            );
+            
+            if (!confirmed) return;
+            
+            // Second confirmation for safety
+            const doubleConfirmed = confirm(
+                `FINAL CONFIRMATION\n\n` +
+                `Delete all ${movementCount} movements for ${dateDisplay}?\n\n` +
+                `Click OK to proceed with deletion.`
+            );
+            
+            if (!doubleConfirmed) return;
+            
+            try {
+                const result = await api(`/movements/bulk/${selectedDate}`, { method: 'DELETE' });
+                showToast(result.message);
+                
+                // Refresh data
+                await refreshData();
+                
+                // Hide clear day button since there's nothing left
+                document.getElementById('clearDayBtn').classList.add('hidden');
+                
+            } catch (err) {
+                console.error('Clear day error:', err);
+                showToast('Failed to clear day: ' + (err.message || 'Unknown error'), 'error');
             }
         }
         

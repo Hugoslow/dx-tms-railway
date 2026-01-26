@@ -972,6 +972,62 @@ app.post('/api/movements', authenticateToken, requirePermission('canManageTrunks
   }
 });
 
+// Bulk delete all movements for a future date
+app.delete('/api/movements/bulk/:date', authenticateToken, requirePermission('canCopyDates'), async (req, res) => {
+  try {
+    const targetDate = req.params.date;
+    const today = getOperationalDay(new Date());
+    
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+    
+    // Check date is in the future (not today or past)
+    if (targetDate <= today) {
+      return res.status(400).json({ error: 'Can only bulk delete movements for future dates' });
+    }
+    
+    // Count movements before delete
+    const countResult = await pool.query(
+      'SELECT COUNT(*) as count FROM trunk_movements WHERE movement_date = $1',
+      [targetDate]
+    );
+    const deleteCount = parseInt(countResult.rows[0].count);
+    
+    if (deleteCount === 0) {
+      return res.status(404).json({ error: 'No movements found for this date' });
+    }
+    
+    // Delete all movements for this date
+    await pool.query(
+      'DELETE FROM trunk_movements WHERE movement_date = $1',
+      [targetDate]
+    );
+    
+    // Also delete any amendments for this date
+    await pool.query(
+      'DELETE FROM schedule_amendments WHERE amendment_date = $1',
+      [targetDate]
+    );
+    
+    // Log the action
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Bulk Delete', `Deleted ${deleteCount} movements for ${targetDate}`]
+    );
+    
+    res.json({ 
+      message: `Successfully deleted ${deleteCount} movements for ${targetDate}`,
+      deleted_count: deleteCount,
+      date: targetDate
+    });
+  } catch (err) {
+    console.error('Bulk delete error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ TRUNK SCHEDULE (MASTER) ENDPOINTS ============
 
 // Get all scheduled trunks (master template - sorted by operational time)

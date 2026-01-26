@@ -4,9 +4,11 @@ const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
 require('dotenv').config();
 
 const app = express();
@@ -3338,6 +3340,322 @@ app.put('/api/purchase-orders/:id/sent', authenticateToken, requirePermission('c
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Mark PO sent error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Generate PDF for Purchase Order
+app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    // Get PO with all details
+    const poResult = await pool.query(
+      `SELECT po.*, c.name as contractor_name, c.code as contractor_code, 
+       c.address_line1 as contractor_address1, c.address_line2 as contractor_address2, 
+       c.city as contractor_city, c.postcode as contractor_postcode,
+       c.contact_name as contractor_contact, c.po_email as contractor_email, 
+       c.contact_phone as contractor_phone, c.vat_registered, c.vat_number,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM purchase_orders po
+       LEFT JOIN contractors c ON po.contractor_id = c.id
+       LEFT JOIN users u1 ON po.created_by = u1.id
+       LEFT JOIN users u2 ON po.authorised_by = u2.id
+       WHERE po.id = $1`,
+      [req.params.id]
+    );
+    
+    if (poResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found' });
+    }
+    
+    const po = poResult.rows[0];
+    
+    // Get PO lines
+    const linesResult = await pool.query(
+      'SELECT * FROM purchase_order_lines WHERE po_id = $1 ORDER BY movement_date, route_ref',
+      [req.params.id]
+    );
+    const lines = linesResult.rows;
+    
+    // Get company settings
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    // Create PDF
+    const doc = new PDFDocument({ 
+      size: 'A4', 
+      margin: 50,
+      info: {
+        Title: `Purchase Order ${po.po_number}`,
+        Author: 'DX Trunking Management System'
+      }
+    });
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=PO_${po.po_number}.pdf`);
+    
+    doc.pipe(res);
+    
+    // Colors
+    const dxBlue = '#0066B3';
+    const dxLightBlue = '#00A0E3';
+    const darkGray = '#333333';
+    const lightGray = '#666666';
+    
+    // Try to add logo
+    const logoPath = path.join(__dirname, 'public', 'dx_freight_logo.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 40, { width: 100 });
+    }
+    
+    // Header - PO Title
+    doc.fontSize(24).fillColor(dxBlue).text('PURCHASE ORDER', 200, 50, { align: 'right' });
+    doc.fontSize(14).fillColor(darkGray).text(po.po_number, 200, 80, { align: 'right' });
+    
+    // Status badge
+    const statusColors = { draft: '#6b7280', authorised: '#f59e0b', sent: '#10b981' };
+    doc.fontSize(10).fillColor(statusColors[po.status] || '#6b7280')
+       .text(po.status.toUpperCase(), 200, 100, { align: 'right' });
+    
+    doc.moveDown(2);
+    
+    // Horizontal line
+    doc.moveTo(50, 130).lineTo(545, 130).strokeColor(dxBlue).lineWidth(2).stroke();
+    
+    // FROM and TO sections side by side
+    const leftCol = 50;
+    const rightCol = 300;
+    let yPos = 150;
+    
+    // FROM - DX Details
+    doc.fontSize(10).fillColor(dxBlue).font('Helvetica-Bold').text('FROM:', leftCol, yPos);
+    yPos += 15;
+    doc.fontSize(10).fillColor(darkGray).font('Helvetica-Bold').text(settings.company_name || 'DX Network Services Ltd', leftCol, yPos);
+    yPos += 12;
+    doc.font('Helvetica').fontSize(9).fillColor(lightGray);
+    if (settings.company_address_line1) { doc.text(settings.company_address_line1, leftCol, yPos); yPos += 11; }
+    if (settings.company_address_line2) { doc.text(settings.company_address_line2, leftCol, yPos); yPos += 11; }
+    if (settings.company_city || settings.company_postcode) { 
+      doc.text(`${settings.company_city || ''} ${settings.company_postcode || ''}`.trim(), leftCol, yPos); 
+      yPos += 11; 
+    }
+    yPos += 5;
+    doc.fontSize(8).fillColor(lightGray).text('Query Contact:', leftCol, yPos);
+    yPos += 10;
+    if (settings.query_contact_name) { doc.text(settings.query_contact_name, leftCol, yPos); yPos += 10; }
+    if (settings.query_contact_email) { doc.text(settings.query_contact_email, leftCol, yPos); yPos += 10; }
+    if (settings.query_contact_phone) { doc.text(settings.query_contact_phone, leftCol, yPos); yPos += 10; }
+    
+    // TO - Contractor Details
+    yPos = 150;
+    doc.fontSize(10).fillColor(dxBlue).font('Helvetica-Bold').text('TO:', rightCol, yPos);
+    yPos += 15;
+    doc.fontSize(10).fillColor(darkGray).font('Helvetica-Bold').text(po.contractor_name, rightCol, yPos);
+    yPos += 12;
+    doc.font('Helvetica').fontSize(9).fillColor(lightGray);
+    if (po.contractor_address1) { doc.text(po.contractor_address1, rightCol, yPos); yPos += 11; }
+    if (po.contractor_address2) { doc.text(po.contractor_address2, rightCol, yPos); yPos += 11; }
+    if (po.contractor_city || po.contractor_postcode) { 
+      doc.text(`${po.contractor_city || ''} ${po.contractor_postcode || ''}`.trim(), rightCol, yPos); 
+      yPos += 11; 
+    }
+    yPos += 5;
+    if (po.contractor_contact) { doc.text(`Contact: ${po.contractor_contact}`, rightCol, yPos); yPos += 10; }
+    if (po.contractor_email) { doc.text(po.contractor_email, rightCol, yPos); yPos += 10; }
+    if (po.contractor_phone) { doc.text(po.contractor_phone, rightCol, yPos); yPos += 10; }
+    if (po.vat_number) { doc.text(`VAT: ${po.vat_number}`, rightCol, yPos); yPos += 10; }
+    
+    // PO Details box
+    yPos = 280;
+    doc.rect(50, yPos, 495, 50).fillColor('#f8fafc').fill();
+    doc.fillColor(darkGray).fontSize(9);
+    doc.font('Helvetica-Bold').text('PO Date:', 60, yPos + 10);
+    doc.font('Helvetica').text(new Date(po.created_at).toLocaleDateString('en-GB'), 120, yPos + 10);
+    doc.font('Helvetica-Bold').text('Week:', 60, yPos + 25);
+    doc.font('Helvetica').text(`${new Date(po.week_commencing).toLocaleDateString('en-GB')} - ${new Date(po.week_ending).toLocaleDateString('en-GB')}`, 120, yPos + 25);
+    
+    doc.font('Helvetica-Bold').text('Created By:', 280, yPos + 10);
+    doc.font('Helvetica').text(po.created_by_name || '-', 350, yPos + 10);
+    if (po.authorised_by_name) {
+      doc.font('Helvetica-Bold').text('Authorised By:', 280, yPos + 25);
+      doc.font('Helvetica').text(po.authorised_by_name, 350, yPos + 25);
+    }
+    
+    // Line Items Header
+    yPos = 350;
+    doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+    doc.text('Date', 55, yPos + 6);
+    doc.text('Route', 110, yPos + 6);
+    doc.text('Day Type', 160, yPos + 6);
+    doc.text('Details', 230, yPos + 6);
+    doc.text('Base Cost', 420, yPos + 6, { width: 60, align: 'right' });
+    doc.text('Total', 480, yPos + 6, { width: 60, align: 'right' });
+    
+    yPos += 20;
+    
+    // Line Items
+    const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Hol' };
+    let rowIndex = 0;
+    
+    for (const line of lines) {
+      // Check if we need a new page
+      if (yPos > 700) {
+        doc.addPage();
+        yPos = 50;
+        
+        // Repeat header on new page
+        doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
+        doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+        doc.text('Date', 55, yPos + 6);
+        doc.text('Route', 110, yPos + 6);
+        doc.text('Day Type', 160, yPos + 6);
+        doc.text('Details', 230, yPos + 6);
+        doc.text('Base Cost', 420, yPos + 6, { width: 60, align: 'right' });
+        doc.text('Total', 480, yPos + 6, { width: 60, align: 'right' });
+        yPos += 20;
+      }
+      
+      // Alternate row background
+      if (rowIndex % 2 === 0) {
+        doc.rect(50, yPos, 495, 50).fillColor('#f8fafc').fill();
+      }
+      
+      doc.fillColor(darkGray).fontSize(8).font('Helvetica');
+      
+      // Date
+      doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 5);
+      
+      // Route
+      doc.font('Helvetica-Bold').text(line.route_ref || '-', 110, yPos + 5);
+      doc.font('Helvetica');
+      
+      // Day Type
+      doc.text(dayTypeLabels[line.day_type] || line.day_type, 160, yPos + 5);
+      
+      // Route Legs Details
+      let legYPos = yPos + 5;
+      if (line.route_legs && Array.isArray(line.route_legs)) {
+        for (const leg of line.route_legs) {
+          if (legYPos > yPos + 5) legYPos += 2;
+          
+          // Origin
+          const originName = leg.origin_address?.name || leg.origin;
+          const originAddr = leg.origin_address ? 
+            `${leg.origin_address.address_line1 || ''}, ${leg.origin_address.city || ''} ${leg.origin_address.postcode || ''}`.replace(/^, |, $/g, '') : '';
+          
+          // Destination  
+          const destName = leg.destination_address?.name || leg.destination;
+          const destAddr = leg.destination_address ? 
+            `${leg.destination_address.address_line1 || ''}, ${leg.destination_address.city || ''} ${leg.destination_address.postcode || ''}`.replace(/^, |, $/g, '') : '';
+          
+          doc.fontSize(7).fillColor(darkGray);
+          doc.text(`${leg.scheduled_dep || ''} ${originName}`, 230, legYPos, { width: 180 });
+          legYPos += 8;
+          if (originAddr) {
+            doc.fontSize(6).fillColor(lightGray).text(originAddr, 230, legYPos, { width: 180 });
+            legYPos += 7;
+          }
+          doc.fontSize(7).fillColor(darkGray);
+          doc.text(`→ ${leg.scheduled_arr || ''} ${destName}`, 230, legYPos, { width: 180 });
+          legYPos += 8;
+          if (destAddr) {
+            doc.fontSize(6).fillColor(lightGray).text(destAddr, 230, legYPos, { width: 180 });
+            legYPos += 7;
+          }
+        }
+      } else {
+        // Simple origin/destination if no legs
+        doc.fontSize(7).text(`${line.origin || ''} → ${line.destination || ''}`, 230, yPos + 5, { width: 180 });
+      }
+      
+      // Costs
+      doc.fontSize(8).fillColor(darkGray);
+      doc.text(`£${parseFloat(line.base_cost).toFixed(2)}`, 420, yPos + 5, { width: 60, align: 'right' });
+      doc.font('Helvetica-Bold').text(`£${parseFloat(line.line_total).toFixed(2)}`, 480, yPos + 5, { width: 60, align: 'right' });
+      
+      yPos += Math.max(50, legYPos - yPos + 10);
+      rowIndex++;
+    }
+    
+    // Totals section
+    yPos += 10;
+    if (yPos > 650) {
+      doc.addPage();
+      yPos = 50;
+    }
+    
+    // Get FSC percentage from settings
+    const fscPercent = settings.fuel_surcharge_percent || '15';
+    const vatRate = settings.vat_rate || '20';
+    
+    // Totals box
+    const totalsX = 350;
+    doc.rect(totalsX, yPos, 195, 100).strokeColor(dxBlue).lineWidth(1).stroke();
+    
+    doc.fontSize(9).font('Helvetica').fillColor(darkGray);
+    doc.text('Subtotal:', totalsX + 10, yPos + 10);
+    doc.text(`£${parseFloat(po.subtotal).toFixed(2)}`, totalsX + 100, yPos + 10, { width: 80, align: 'right' });
+    
+    doc.text(`FSC (${fscPercent}%):`, totalsX + 10, yPos + 25);
+    doc.text(`£${parseFloat(po.fsc_total).toFixed(2)}`, totalsX + 100, yPos + 25, { width: 80, align: 'right' });
+    
+    doc.text(`VAT (${vatRate}%):`, totalsX + 10, yPos + 40);
+    doc.text(`£${parseFloat(po.vat_amount).toFixed(2)}`, totalsX + 100, yPos + 40, { width: 80, align: 'right' });
+    
+    doc.moveTo(totalsX + 10, yPos + 55).lineTo(totalsX + 185, yPos + 55).strokeColor(darkGray).lineWidth(0.5).stroke();
+    
+    doc.fontSize(11).font('Helvetica-Bold').fillColor(dxBlue);
+    doc.text('TOTAL:', totalsX + 10, yPos + 65);
+    doc.text(`£${parseFloat(po.grand_total).toFixed(2)}`, totalsX + 100, yPos + 65, { width: 80, align: 'right' });
+    
+    // Payment Terms
+    yPos += 120;
+    if (yPos > 750) {
+      doc.addPage();
+      yPos = 50;
+    }
+    
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(dxBlue).text('Payment Terms:', 50, yPos);
+    doc.font('Helvetica').fillColor(darkGray).text(settings.payment_terms_text || 'Payment due within 30 days of invoice date', 50, yPos + 12);
+    
+    // Invoice Address
+    if (settings.invoice_address_line1) {
+      yPos += 35;
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(dxBlue).text('Invoice Address:', 50, yPos);
+      yPos += 12;
+      doc.font('Helvetica').fontSize(8).fillColor(lightGray);
+      if (settings.invoice_address_line1) doc.text(settings.invoice_address_line1, 50, yPos); yPos += 10;
+      if (settings.invoice_address_line2) doc.text(settings.invoice_address_line2, 50, yPos); yPos += 10;
+      if (settings.invoice_city || settings.invoice_postcode) {
+        doc.text(`${settings.invoice_city || ''} ${settings.invoice_postcode || ''}`.trim(), 50, yPos);
+      }
+    }
+    
+    // Notes
+    if (po.notes) {
+      yPos += 30;
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(dxBlue).text('Notes:', 50, yPos);
+      doc.font('Helvetica').fillColor(darkGray).text(po.notes, 50, yPos + 12, { width: 495 });
+    }
+    
+    // Footer
+    doc.fontSize(7).fillColor(lightGray);
+    doc.text(`Generated by DX TMS on ${new Date().toLocaleString('en-GB')}`, 50, 780, { align: 'center', width: 495 });
+    
+    doc.end();
+    
+    // Log the download
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'PO PDF Downloaded', `Downloaded PDF for ${po.po_number}`]
+    );
+    
+  } catch (err) {
+    console.error('Generate PO PDF error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

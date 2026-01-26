@@ -1,4 +1,5 @@
 const express = require('express');
+console.log('=== TMS Server v4.0 Starting ===');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
@@ -3562,7 +3563,7 @@ app.get('/api/reports/weekly-export', authenticateToken, requirePermission('canP
 });
 
 // Get unique route refs from schedule (for dropdowns)
-app.get('/api/route-refs', authenticateToken, async (req, res) => {
+app.get('/api/schedule/route-refs', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT DISTINCT route_ref FROM trunk_schedule WHERE route_ref IS NOT NULL ORDER BY route_ref'
@@ -3575,7 +3576,7 @@ app.get('/api/route-refs', authenticateToken, async (req, res) => {
 });
 
 // Get unique contractor codes from schedule (for dropdowns)
-app.get('/api/contractor-codes', authenticateToken, async (req, res) => {
+app.get('/api/schedule/contractor-codes', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT DISTINCT contractor FROM trunk_schedule WHERE contractor IS NOT NULL ORDER BY contractor'

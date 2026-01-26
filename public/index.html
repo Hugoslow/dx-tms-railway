@@ -3175,7 +3175,7 @@
                 case 'settings': loadCompanySettings(); break;
                 case 'purchase-orders': loadPurchaseOrders(); loadPOFilters(); break;
                 case 'credit-notes': loadCreditNotes(); break;
-                case 'reports': initReportDates(); break;
+                case 'reports': initCostingReportDates(); break;
             }
         }
         
@@ -3393,8 +3393,8 @@
         
         async function loadRouteCostFilters() {
             try {
-                const contractorCodes = await api('/contractor-codes');
-                const routeRefs = await api('/route-refs');
+                const contractorCodes = await api('/schedule/contractor-codes');
+                const routeRefs = await api('/schedule/route-refs');
                 
                 const contractorSelect = document.getElementById('filterRouteCostContractor');
                 const routeSelect = document.getElementById('filterRouteCostRoute');
@@ -3485,8 +3485,8 @@
         
         async function loadRouteCostModalDropdowns() {
             try {
-                const contractorCodes = await api('/contractor-codes');
-                const routeRefs = await api('/route-refs');
+                const contractorCodes = await api('/schedule/contractor-codes');
+                const routeRefs = await api('/schedule/route-refs');
                 
                 document.getElementById('routeCostContractor').innerHTML = 
                     '<option value="">Select Contractor</option>' +
@@ -3918,7 +3918,7 @@
         
         // ============ REPORTS ============
         
-        function initReportDates() {
+        function initCostingReportDates() {
             const today = new Date();
             const lastMonday = new Date(today);
             lastMonday.setDate(today.getDate() - today.getDay() - 6);

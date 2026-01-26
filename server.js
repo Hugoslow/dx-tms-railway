@@ -167,13 +167,14 @@ function authenticateToken(req, res, next) {
 // ============ ROLE-BASED ACCESS CONTROL ============
 
 const rolePermissions = {
-  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false },
-  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false },
-  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false },
-  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false },
-  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false },
-  'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true },
-  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true }
+  'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'finance': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: true, canViewFuture: true, canCopyDates: false, canViewCosts: true, canRaisePO: false, canAuthorisePO: false, canPullReports: true, canManageCosts: false },
+  'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: true, canPullReports: true, canManageCosts: true }
 };
 
 // Date access validation helper
@@ -2488,6 +2489,1100 @@ app.get('/api/export/data', authenticateToken, async (req, res) => {
     
   } catch (err) {
     console.error('Data export error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ COSTING & PURCHASE ORDER ENDPOINTS ============
+
+// ============ CONTRACTORS ============
+
+// Get all contractors
+app.get('/api/contractors', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const { active } = req.query;
+    let query = 'SELECT * FROM contractors';
+    const params = [];
+    
+    if (active !== undefined) {
+      query += ' WHERE active = $1';
+      params.push(active === 'true');
+    }
+    
+    query += ' ORDER BY name';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get contractors error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single contractor
+app.get('/api/contractors/:id', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM contractors WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Get contractor error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create contractor
+app.post('/api/contractors', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { code, name, address_line1, address_line2, city, postcode, contact_name, contact_email, contact_phone, po_email, vat_registered, vat_number, payment_terms, is_internal, notes } = req.body;
+    
+    const result = await pool.query(
+      `INSERT INTO contractors (code, name, address_line1, address_line2, city, postcode, contact_name, contact_email, contact_phone, po_email, vat_registered, vat_number, payment_terms, is_internal, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING *`,
+      [code, name, address_line1, address_line2, city, postcode, contact_name, contact_email, contact_phone, po_email, vat_registered !== false, vat_number, payment_terms || 30, is_internal || false, notes]
+    );
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Contractor Created', `Created contractor: ${name} (${code})`]
+    );
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create contractor error:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Contractor code already exists' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update contractor
+app.put('/api/contractors/:id', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { code, name, address_line1, address_line2, city, postcode, contact_name, contact_email, contact_phone, po_email, vat_registered, vat_number, payment_terms, is_internal, active, notes } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE contractors SET code=$1, name=$2, address_line1=$3, address_line2=$4, city=$5, postcode=$6, contact_name=$7, contact_email=$8, contact_phone=$9, po_email=$10, vat_registered=$11, vat_number=$12, payment_terms=$13, is_internal=$14, active=$15, notes=$16, updated_at=NOW()
+       WHERE id=$17 RETURNING *`,
+      [code, name, address_line1, address_line2, city, postcode, contact_name, contact_email, contact_phone, po_email, vat_registered, vat_number, payment_terms, is_internal, active, notes, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Contractor Updated', `Updated contractor: ${name} (${code})`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update contractor error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ LOCATIONS ============
+
+// Get all locations
+app.get('/api/locations', authenticateToken, async (req, res) => {
+  try {
+    const { active } = req.query;
+    let query = 'SELECT * FROM locations';
+    const params = [];
+    
+    if (active !== undefined) {
+      query += ' WHERE active = $1';
+      params.push(active === 'true');
+    }
+    
+    query += ' ORDER BY name';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get locations error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single location
+app.get('/api/locations/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM locations WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Get location error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create location
+app.post('/api/locations', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { code, name, address_line1, address_line2, city, postcode, location_type, notes } = req.body;
+    
+    const result = await pool.query(
+      `INSERT INTO locations (code, name, address_line1, address_line2, city, postcode, location_type, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [code, name, address_line1, address_line2, city, postcode, location_type || 'depot', notes]
+    );
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Location Created', `Created location: ${name} (${code})`]
+    );
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create location error:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Location code already exists' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update location
+app.put('/api/locations/:id', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { code, name, address_line1, address_line2, city, postcode, location_type, active, notes } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE locations SET code=$1, name=$2, address_line1=$3, address_line2=$4, city=$5, postcode=$6, location_type=$7, active=$8, notes=$9
+       WHERE id=$10 RETURNING *`,
+      [code, name, address_line1, address_line2, city, postcode, location_type, active, notes, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Location Updated', `Updated location: ${name} (${code})`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update location error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ ROUTE COSTS ============
+
+// Get all route costs
+app.get('/api/route-costs', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const { route_ref, contractor_code, active } = req.query;
+    let query = `SELECT rc.*, c.name as contractor_name 
+                 FROM route_costs rc 
+                 LEFT JOIN contractors c ON rc.contractor_code = c.code
+                 WHERE 1=1`;
+    const params = [];
+    let paramCount = 0;
+    
+    if (route_ref) {
+      paramCount++;
+      query += ` AND rc.route_ref = $${paramCount}`;
+      params.push(route_ref);
+    }
+    if (contractor_code) {
+      paramCount++;
+      query += ` AND rc.contractor_code = $${paramCount}`;
+      params.push(contractor_code);
+    }
+    if (active !== undefined) {
+      paramCount++;
+      query += ` AND rc.active = $${paramCount}`;
+      params.push(active === 'true');
+    }
+    
+    query += ' ORDER BY rc.route_ref, rc.contractor_code, rc.day_type';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get route costs error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create route cost
+app.post('/api/route-costs', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { route_ref, contractor_code, day_type, base_cost, effective_from, effective_to, notes } = req.body;
+    
+    const result = await pool.query(
+      `INSERT INTO route_costs (route_ref, contractor_code, day_type, base_cost, effective_from, effective_to, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [route_ref, contractor_code, day_type || 'weekday', base_cost, effective_from || new Date().toISOString().split('T')[0], effective_to, notes]
+    );
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Route Cost Created', `Route: ${route_ref}, Contractor: ${contractor_code}, Day: ${day_type}, Cost: £${base_cost}`]
+    );
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create route cost error:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'This route/contractor/day type combination already exists for this effective date' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update route cost
+app.put('/api/route-costs/:id', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { route_ref, contractor_code, day_type, base_cost, effective_from, effective_to, active, notes } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE route_costs SET route_ref=$1, contractor_code=$2, day_type=$3, base_cost=$4, effective_from=$5, effective_to=$6, active=$7, notes=$8, updated_at=NOW()
+       WHERE id=$9 RETURNING *`,
+      [route_ref, contractor_code, day_type, base_cost, effective_from, effective_to, active, notes, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Route cost not found' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Route Cost Updated', `Route: ${route_ref}, Contractor: ${contractor_code}, Cost: £${base_cost}`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update route cost error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete route cost
+app.delete('/api/route-costs/:id', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM route_costs WHERE id = $1 RETURNING *', [req.params.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Route cost not found' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Route Cost Deleted', `Route: ${result.rows[0].route_ref}, Contractor: ${result.rows[0].contractor_code}`]
+    );
+    
+    res.json({ message: 'Route cost deleted' });
+  } catch (err) {
+    console.error('Delete route cost error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ BANK HOLIDAYS ============
+
+// Get all bank holidays
+app.get('/api/bank-holidays', authenticateToken, async (req, res) => {
+  try {
+    const { year } = req.query;
+    let query = 'SELECT * FROM bank_holidays';
+    const params = [];
+    
+    if (year) {
+      query += ' WHERE EXTRACT(YEAR FROM holiday_date) = $1';
+      params.push(year);
+    }
+    
+    query += ' ORDER BY holiday_date';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get bank holidays error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create bank holiday
+app.post('/api/bank-holidays', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const { holiday_date, description } = req.body;
+    
+    const result = await pool.query(
+      `INSERT INTO bank_holidays (holiday_date, description, created_by)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [holiday_date, description, req.user.fullName]
+    );
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Bank Holiday Created', `Date: ${holiday_date}, ${description}`]
+    );
+    
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create bank holiday error:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'This date is already marked as a bank holiday' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete bank holiday
+app.delete('/api/bank-holidays/:id', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM bank_holidays WHERE id = $1 RETURNING *', [req.params.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bank holiday not found' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Bank Holiday Deleted', `Date: ${result.rows[0].holiday_date}`]
+    );
+    
+    res.json({ message: 'Bank holiday deleted' });
+  } catch (err) {
+    console.error('Delete bank holiday error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ COMPANY SETTINGS ============
+
+// Get all company settings
+app.get('/api/company-settings', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM company_settings ORDER BY setting_key');
+    // Convert to key-value object
+    const settings = {};
+    result.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    res.json(settings);
+  } catch (err) {
+    console.error('Get company settings error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update company settings
+app.put('/api/company-settings', authenticateToken, requirePermission('canManageCosts'), async (req, res) => {
+  try {
+    const settings = req.body;
+    
+    for (const [key, value] of Object.entries(settings)) {
+      await pool.query(
+        `INSERT INTO company_settings (setting_key, setting_value, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = NOW()`,
+        [key, value]
+      );
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Company Settings Updated', `Updated ${Object.keys(settings).length} settings`]
+    );
+    
+    res.json({ message: 'Settings updated successfully' });
+  } catch (err) {
+    console.error('Update company settings error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ PURCHASE ORDERS ============
+
+// Helper function to get day type
+async function getDayType(date) {
+  // Check if bank holiday
+  const bhResult = await pool.query('SELECT * FROM bank_holidays WHERE holiday_date = $1', [date]);
+  if (bhResult.rows.length > 0) {
+    return 'bank_holiday';
+  }
+  
+  // Check day of week (0 = Sunday, 6 = Saturday)
+  const d = new Date(date);
+  const day = d.getDay();
+  if (day === 0 || day === 6) {
+    return 'weekend';
+  }
+  
+  return 'weekday';
+}
+
+// Helper function to generate PO number
+async function generatePONumber() {
+  const year = new Date().getFullYear();
+  const yearShort = year.toString().slice(-2);
+  
+  const result = await pool.query(
+    `INSERT INTO po_sequence (year, last_number) VALUES ($1, 1)
+     ON CONFLICT (year) DO UPDATE SET last_number = po_sequence.last_number + 1
+     RETURNING last_number`,
+    [year]
+  );
+  
+  const seqNum = result.rows[0].last_number;
+  return `DX-TR-${yearShort}-${seqNum.toString().padStart(5, '0')}`;
+}
+
+// Helper function to generate Credit Note number
+async function generateCreditNumber() {
+  const year = new Date().getFullYear();
+  const yearShort = year.toString().slice(-2);
+  
+  const result = await pool.query(
+    `INSERT INTO credit_sequence (year, last_number) VALUES ($1, 1)
+     ON CONFLICT (year) DO UPDATE SET last_number = credit_sequence.last_number + 1
+     RETURNING last_number`,
+    [year]
+  );
+  
+  const seqNum = result.rows[0].last_number;
+  return `DX-CR-${yearShort}-${seqNum.toString().padStart(5, '0')}`;
+}
+
+// Get all purchase orders
+app.get('/api/purchase-orders', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const { contractor_id, status, from_date, to_date } = req.query;
+    let query = `SELECT po.*, c.name as contractor_name, c.code as contractor_code,
+                 u1.full_name as created_by_name, u2.full_name as authorised_by_name
+                 FROM purchase_orders po
+                 LEFT JOIN contractors c ON po.contractor_id = c.id
+                 LEFT JOIN users u1 ON po.created_by = u1.id
+                 LEFT JOIN users u2 ON po.authorised_by = u2.id
+                 WHERE 1=1`;
+    const params = [];
+    let paramCount = 0;
+    
+    if (contractor_id) {
+      paramCount++;
+      query += ` AND po.contractor_id = $${paramCount}`;
+      params.push(contractor_id);
+    }
+    if (status) {
+      paramCount++;
+      query += ` AND po.status = $${paramCount}`;
+      params.push(status);
+    }
+    if (from_date) {
+      paramCount++;
+      query += ` AND po.week_commencing >= $${paramCount}`;
+      params.push(from_date);
+    }
+    if (to_date) {
+      paramCount++;
+      query += ` AND po.week_commencing <= $${paramCount}`;
+      params.push(to_date);
+    }
+    
+    query += ' ORDER BY po.created_at DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get purchase orders error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single purchase order with lines
+app.get('/api/purchase-orders/:id', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const poResult = await pool.query(
+      `SELECT po.*, c.name as contractor_name, c.code as contractor_code, c.address_line1 as contractor_address1,
+       c.address_line2 as contractor_address2, c.city as contractor_city, c.postcode as contractor_postcode,
+       c.contact_name as contractor_contact, c.po_email as contractor_email, c.vat_registered,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM purchase_orders po
+       LEFT JOIN contractors c ON po.contractor_id = c.id
+       LEFT JOIN users u1 ON po.created_by = u1.id
+       LEFT JOIN users u2 ON po.authorised_by = u2.id
+       WHERE po.id = $1`,
+      [req.params.id]
+    );
+    
+    if (poResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found' });
+    }
+    
+    const linesResult = await pool.query(
+      'SELECT * FROM purchase_order_lines WHERE po_id = $1 ORDER BY movement_date, route_ref',
+      [req.params.id]
+    );
+    
+    const po = poResult.rows[0];
+    po.lines = linesResult.rows;
+    
+    res.json(po);
+  } catch (err) {
+    console.error('Get purchase order error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Preview PO for a contractor and week (doesn't save)
+app.post('/api/purchase-orders/preview', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  try {
+    const { contractor_id, week_commencing } = req.body;
+    
+    // Get contractor details
+    const contractorResult = await pool.query('SELECT * FROM contractors WHERE id = $1', [contractor_id]);
+    if (contractorResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+    const contractor = contractorResult.rows[0];
+    
+    // Calculate week ending (Sunday)
+    const weekStart = new Date(week_commencing);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+    
+    // Get company settings
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    const fscPercent = parseFloat(settings.fuel_surcharge_percent || 15);
+    const vatRate = parseFloat(settings.vat_rate || 20);
+    
+    // Get all scheduled movements for this contractor in the week
+    // We look at trunk_schedule to get the routes this contractor operates
+    const movementsResult = await pool.query(
+      `SELECT DISTINCT route_ref, trunk_id, origin, destination, scheduled_dep, scheduled_arr
+       FROM trunk_schedule 
+       WHERE contractor = $1 AND active = true
+       ORDER BY route_ref`,
+      [contractor.code]
+    );
+    
+    const lines = [];
+    let subtotal = 0;
+    let fscTotal = 0;
+    
+    // For each day in the week
+    for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      const dayType = await getDayType(dateStr);
+      
+      // Get unique routes for this contractor on this day
+      const routesOnDay = await pool.query(
+        `SELECT DISTINCT route_ref FROM trunk_schedule WHERE contractor = $1 AND active = true`,
+        [contractor.code]
+      );
+      
+      for (const routeRow of routesOnDay.rows) {
+        const routeRef = routeRow.route_ref;
+        
+        // Get cost for this route/contractor/day_type
+        const costResult = await pool.query(
+          `SELECT * FROM route_costs 
+           WHERE route_ref = $1 AND contractor_code = $2 AND day_type = $3 
+           AND active = true AND effective_from <= $4 
+           AND (effective_to IS NULL OR effective_to >= $4)
+           ORDER BY effective_from DESC LIMIT 1`,
+          [routeRef, contractor.code, dayType, dateStr]
+        );
+        
+        if (costResult.rows.length === 0) {
+          // No cost defined for this combination, skip or use 0
+          continue;
+        }
+        
+        const baseCost = parseFloat(costResult.rows[0].base_cost);
+        const fscAmount = baseCost * (fscPercent / 100);
+        const lineTotal = baseCost + fscAmount;
+        
+        // Get all legs for this route
+        const legsResult = await pool.query(
+          `SELECT trunk_id, origin, destination, scheduled_dep, scheduled_arr
+           FROM trunk_schedule 
+           WHERE route_ref = $1 AND contractor = $2 AND active = true
+           ORDER BY scheduled_dep`,
+          [routeRef, contractor.code]
+        );
+        
+        // Get location details for legs
+        const legs = [];
+        for (const leg of legsResult.rows) {
+          const originLoc = await pool.query('SELECT * FROM locations WHERE code = $1', [leg.origin]);
+          const destLoc = await pool.query('SELECT * FROM locations WHERE code = $1', [leg.destination]);
+          
+          legs.push({
+            trunk_id: leg.trunk_id,
+            origin: leg.origin,
+            origin_address: originLoc.rows[0] || null,
+            destination: leg.destination,
+            destination_address: destLoc.rows[0] || null,
+            scheduled_dep: leg.scheduled_dep,
+            scheduled_arr: leg.scheduled_arr
+          });
+        }
+        
+        lines.push({
+          movement_date: dateStr,
+          route_ref: routeRef,
+          trunk_id: legs[0]?.trunk_id,
+          day_type: dayType,
+          origin: legs[0]?.origin,
+          destination: legs[legs.length - 1]?.destination,
+          scheduled_dep: legs[0]?.scheduled_dep,
+          scheduled_arr: legs[legs.length - 1]?.scheduled_arr,
+          route_legs: legs,
+          base_cost: baseCost,
+          fsc_amount: fscAmount,
+          line_total: lineTotal
+        });
+        
+        subtotal += baseCost;
+        fscTotal += fscAmount;
+      }
+    }
+    
+    const vatAmount = contractor.vat_registered ? (subtotal + fscTotal) * (vatRate / 100) : 0;
+    const grandTotal = subtotal + fscTotal + vatAmount;
+    
+    res.json({
+      contractor,
+      week_commencing,
+      week_ending: weekEndStr,
+      lines,
+      subtotal: subtotal.toFixed(2),
+      fsc_total: fscTotal.toFixed(2),
+      fsc_percent: fscPercent,
+      vat_rate: vatRate,
+      vat_amount: vatAmount.toFixed(2),
+      grand_total: grandTotal.toFixed(2),
+      settings
+    });
+  } catch (err) {
+    console.error('Preview PO error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create purchase order
+app.post('/api/purchase-orders', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { contractor_id, week_commencing, lines, subtotal, fsc_total, vat_amount, grand_total, notes } = req.body;
+    
+    // Calculate week ending
+    const weekStart = new Date(week_commencing);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+    
+    // Generate PO number
+    const poNumber = await generatePONumber();
+    
+    // Create PO header
+    const poResult = await client.query(
+      `INSERT INTO purchase_orders (po_number, contractor_id, week_commencing, week_ending, subtotal, fsc_total, vat_amount, grand_total, status, created_by, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+       RETURNING *`,
+      [poNumber, contractor_id, week_commencing, weekEndStr, subtotal, fsc_total, vat_amount, grand_total, req.user.userId, notes]
+    );
+    
+    const poId = poResult.rows[0].id;
+    
+    // Create PO lines
+    for (const line of lines) {
+      await client.query(
+        `INSERT INTO purchase_order_lines (po_id, movement_date, route_ref, trunk_id, day_type, origin, destination, scheduled_dep, scheduled_arr, route_legs, base_cost, fsc_amount, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [poId, line.movement_date, line.route_ref, line.trunk_id, line.day_type, line.origin, line.destination, line.scheduled_dep, line.scheduled_arr, JSON.stringify(line.route_legs), line.base_cost, line.fsc_amount, line.line_total]
+      );
+    }
+    
+    await client.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'PO Created', `PO ${poNumber} for contractor ID ${contractor_id}, Total: £${grand_total}`]
+    );
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({ ...poResult.rows[0], lines });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create PO error:', err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// Authorise purchase order
+app.put('/api/purchase-orders/:id/authorise', authenticateToken, requirePermission('canAuthorisePO'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE purchase_orders SET status = 'authorised', authorised_by = $1, authorised_at = NOW(), updated_at = NOW()
+       WHERE id = $2 AND status = 'draft' RETURNING *`,
+      [req.user.userId, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found or already authorised' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'PO Authorised', `PO ${result.rows[0].po_number} authorised`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Authorise PO error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Mark PO as sent
+app.put('/api/purchase-orders/:id/sent', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  try {
+    const { sent_to } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE purchase_orders SET status = 'sent', sent_at = NOW(), sent_to = $1, updated_at = NOW()
+       WHERE id = $2 AND status = 'authorised' RETURNING *`,
+      [sent_to, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found or not authorised' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'PO Sent', `PO ${result.rows[0].po_number} sent to ${sent_to}`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Mark PO sent error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ CREDIT NOTES ============
+
+// Get all credit notes
+app.get('/api/credit-notes', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT cn.*, c.name as contractor_name, po.po_number,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM credit_notes cn
+       LEFT JOIN contractors c ON cn.contractor_id = c.id
+       LEFT JOIN purchase_orders po ON cn.po_id = po.id
+       LEFT JOIN users u1 ON cn.created_by = u1.id
+       LEFT JOIN users u2 ON cn.authorised_by = u2.id
+       ORDER BY cn.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get credit notes error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create credit note
+app.post('/api/credit-notes', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { po_id, lines, reason, notes } = req.body;
+    
+    // Get original PO
+    const poResult = await client.query('SELECT * FROM purchase_orders WHERE id = $1', [po_id]);
+    if (poResult.rows.length === 0) {
+      throw new Error('Original PO not found');
+    }
+    const po = poResult.rows[0];
+    
+    // Get company settings for VAT
+    const settingsResult = await client.query("SELECT setting_value FROM company_settings WHERE setting_key = 'vat_rate'");
+    const vatRate = parseFloat(settingsResult.rows[0]?.setting_value || 20);
+    
+    // Get contractor VAT status
+    const contractorResult = await client.query('SELECT vat_registered FROM contractors WHERE id = $1', [po.contractor_id]);
+    const vatRegistered = contractorResult.rows[0]?.vat_registered;
+    
+    // Calculate totals
+    let subtotal = 0;
+    let fscTotal = 0;
+    
+    for (const line of lines) {
+      subtotal += parseFloat(line.base_cost);
+      fscTotal += parseFloat(line.fsc_amount);
+    }
+    
+    const vatAmount = vatRegistered ? (subtotal + fscTotal) * (vatRate / 100) : 0;
+    const grandTotal = subtotal + fscTotal + vatAmount;
+    
+    // Generate credit note number
+    const creditNumber = await generateCreditNumber();
+    
+    // Create credit note header
+    const cnResult = await client.query(
+      `INSERT INTO credit_notes (credit_number, po_id, contractor_id, reason, subtotal, fsc_total, vat_amount, grand_total, status, created_by, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+       RETURNING *`,
+      [creditNumber, po_id, po.contractor_id, reason, subtotal, fscTotal, vatAmount, grandTotal, req.user.userId, notes]
+    );
+    
+    const creditId = cnResult.rows[0].id;
+    
+    // Create credit note lines
+    for (const line of lines) {
+      await client.query(
+        `INSERT INTO credit_note_lines (credit_id, original_po_line_id, movement_date, route_ref, trunk_id, reason, base_cost, fsc_amount, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [creditId, line.original_po_line_id, line.movement_date, line.route_ref, line.trunk_id, line.reason, line.base_cost, line.fsc_amount, line.line_total]
+      );
+    }
+    
+    await client.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Credit Note Created', `Credit Note ${creditNumber} against PO ${po.po_number}, Total: £${grandTotal.toFixed(2)}`]
+    );
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json(cnResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create credit note error:', err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// Authorise credit note
+app.put('/api/credit-notes/:id/authorise', authenticateToken, requirePermission('canAuthorisePO'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE credit_notes SET status = 'authorised', authorised_by = $1, authorised_at = NOW(), updated_at = NOW()
+       WHERE id = $2 AND status = 'draft' RETURNING *`,
+      [req.user.userId, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Credit note not found or already authorised' });
+    }
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Credit Note Authorised', `Credit Note ${result.rows[0].credit_number} authorised`]
+    );
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Authorise credit note error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ COSTING REPORTS ============
+
+// Weekly cost report by contractor
+app.get('/api/reports/weekly-by-contractor', authenticateToken, requirePermission('canPullReports'), async (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+    
+    const result = await pool.query(
+      `SELECT c.code as contractor_code, c.name as contractor_name,
+       COUNT(DISTINCT po.id) as po_count,
+       SUM(po.subtotal) as total_base_cost,
+       SUM(po.fsc_total) as total_fsc,
+       SUM(po.vat_amount) as total_vat,
+       SUM(po.grand_total) as total_cost
+       FROM purchase_orders po
+       JOIN contractors c ON po.contractor_id = c.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY c.id, c.code, c.name
+       ORDER BY total_cost DESC`,
+      [from_date, to_date]
+    );
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Weekly report by contractor error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Weekly cost report by route
+app.get('/api/reports/weekly-by-route', authenticateToken, requirePermission('canPullReports'), async (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+    
+    const result = await pool.query(
+      `SELECT pol.route_ref,
+       COUNT(*) as movement_count,
+       SUM(pol.base_cost) as total_base_cost,
+       SUM(pol.fsc_amount) as total_fsc,
+       SUM(pol.line_total) as total_cost
+       FROM purchase_order_lines pol
+       JOIN purchase_orders po ON pol.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY pol.route_ref
+       ORDER BY total_cost DESC`,
+      [from_date, to_date]
+    );
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Weekly report by route error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Export weekly cost report to Excel
+app.get('/api/reports/weekly-export', authenticateToken, requirePermission('canPullReports'), async (req, res) => {
+  try {
+    const { from_date, to_date, report_type } = req.query;
+    
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'DX TMS';
+    workbook.created = new Date();
+    
+    // By Contractor sheet
+    const contractorSheet = workbook.addWorksheet('By Contractor');
+    contractorSheet.columns = [
+      { header: 'Contractor Code', key: 'contractor_code', width: 15 },
+      { header: 'Contractor Name', key: 'contractor_name', width: 30 },
+      { header: 'PO Count', key: 'po_count', width: 12 },
+      { header: 'Base Cost', key: 'total_base_cost', width: 15 },
+      { header: 'FSC', key: 'total_fsc', width: 15 },
+      { header: 'VAT', key: 'total_vat', width: 15 },
+      { header: 'Total', key: 'total_cost', width: 15 }
+    ];
+    
+    const contractorResult = await pool.query(
+      `SELECT c.code as contractor_code, c.name as contractor_name,
+       COUNT(DISTINCT po.id) as po_count,
+       SUM(po.subtotal) as total_base_cost,
+       SUM(po.fsc_total) as total_fsc,
+       SUM(po.vat_amount) as total_vat,
+       SUM(po.grand_total) as total_cost
+       FROM purchase_orders po
+       JOIN contractors c ON po.contractor_id = c.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY c.id, c.code, c.name
+       ORDER BY total_cost DESC`,
+      [from_date, to_date]
+    );
+    
+    contractorResult.rows.forEach(row => {
+      contractorSheet.addRow(row);
+    });
+    
+    // Style header row
+    contractorSheet.getRow(1).font = { bold: true };
+    contractorSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
+    contractorSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // By Route sheet
+    const routeSheet = workbook.addWorksheet('By Route');
+    routeSheet.columns = [
+      { header: 'Route Ref', key: 'route_ref', width: 15 },
+      { header: 'Movement Count', key: 'movement_count', width: 15 },
+      { header: 'Base Cost', key: 'total_base_cost', width: 15 },
+      { header: 'FSC', key: 'total_fsc', width: 15 },
+      { header: 'Total', key: 'total_cost', width: 15 }
+    ];
+    
+    const routeResult = await pool.query(
+      `SELECT pol.route_ref,
+       COUNT(*) as movement_count,
+       SUM(pol.base_cost) as total_base_cost,
+       SUM(pol.fsc_amount) as total_fsc,
+       SUM(pol.line_total) as total_cost
+       FROM purchase_order_lines pol
+       JOIN purchase_orders po ON pol.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY pol.route_ref
+       ORDER BY total_cost DESC`,
+      [from_date, to_date]
+    );
+    
+    routeResult.rows.forEach(row => {
+      routeSheet.addRow(row);
+    });
+    
+    routeSheet.getRow(1).font = { bold: true };
+    routeSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
+    routeSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // Send file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=TMS_Cost_Report_${from_date}_to_${to_date}.xlsx`);
+    
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Cost Report Export', `Exported cost report: ${from_date} to ${to_date}`]
+    );
+    
+  } catch (err) {
+    console.error('Weekly report export error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get unique route refs from schedule (for dropdowns)
+app.get('/api/route-refs', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT DISTINCT route_ref FROM trunk_schedule WHERE route_ref IS NOT NULL ORDER BY route_ref'
+    );
+    res.json(result.rows.map(r => r.route_ref));
+  } catch (err) {
+    console.error('Get route refs error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get unique contractor codes from schedule (for dropdowns)
+app.get('/api/contractor-codes', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT DISTINCT contractor FROM trunk_schedule WHERE contractor IS NOT NULL ORDER BY contractor'
+    );
+    res.json(result.rows.map(r => r.contractor));
+  } catch (err) {
+    console.error('Get contractor codes error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -8,7 +8,7 @@ const pool = new Pool({
 });
 
 async function initDatabase() {
-  console.log('Initializing database with security features and planning support...');
+  console.log('Initializing database with costing and PO features (v4.0)...');
   
   try {
     // Create tables
@@ -57,7 +57,7 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
-      -- Trunk Movements (daily live data - supports past, present, and future dates)
+      -- Trunk Movements (daily live data)
       CREATE TABLE IF NOT EXISTS trunk_movements (
         id SERIAL PRIMARY KEY,
         trunk_id VARCHAR(20) NOT NULL,
@@ -91,35 +91,17 @@ async function initDatabase() {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
-      -- Schedule Amendments (date-specific changes to the master schedule)
-      -- Used for planning future dates and tracking changes
+      -- Schedule Amendments (for tracking changes to master schedule)
       CREATE TABLE IF NOT EXISTS schedule_amendments (
         id SERIAL PRIMARY KEY,
         amendment_date DATE NOT NULL,
         trunk_id VARCHAR(20) NOT NULL,
-        amendment_type VARCHAR(20) NOT NULL, -- 'modify', 'add', 'cancel'
-        -- Original values (for modify/cancel)
-        original_contractor VARCHAR(50),
-        original_vehicle_type VARCHAR(20),
-        original_origin VARCHAR(100),
-        original_destination VARCHAR(100),
-        original_scheduled_dep VARCHAR(5),
-        original_scheduled_arr VARCHAR(5),
-        original_direction VARCHAR(20),
-        -- New/amended values
-        new_contractor VARCHAR(50),
-        new_vehicle_type VARCHAR(20),
-        new_origin VARCHAR(100),
-        new_destination VARCHAR(100),
-        new_scheduled_dep VARCHAR(5),
-        new_scheduled_arr VARCHAR(5),
-        new_direction VARCHAR(20),
-        new_route_ref VARCHAR(20),
-        -- Metadata
+        amendment_type VARCHAR(20) NOT NULL,
+        original_values JSONB,
+        new_values JSONB,
         reason TEXT,
         created_by VARCHAR(100),
-        created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(amendment_date, trunk_id)
+        created_at TIMESTAMP DEFAULT NOW()
       );
 
       -- Audit Log
@@ -132,6 +114,204 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Daily Reports
+      CREATE TABLE IF NOT EXISTS daily_reports (
+        id SERIAL PRIMARY KEY,
+        report_date DATE NOT NULL UNIQUE,
+        operational_day DATE NOT NULL,
+        total_movements INTEGER DEFAULT 0,
+        inbound_count INTEGER DEFAULT 0,
+        outbound_count INTEGER DEFAULT 0,
+        transfer_count INTEGER DEFAULT 0,
+        completed_count INTEGER DEFAULT 0,
+        in_progress_count INTEGER DEFAULT 0,
+        scheduled_count INTEGER DEFAULT 0,
+        delayed_count INTEGER DEFAULT 0,
+        cancelled_count INTEGER DEFAULT 0,
+        on_time_departures INTEGER DEFAULT 0,
+        late_departures INTEGER DEFAULT 0,
+        on_time_arrivals INTEGER DEFAULT 0,
+        late_arrivals INTEGER DEFAULT 0,
+        completion_rate DECIMAL(5,2) DEFAULT 0,
+        departure_otp DECIMAL(5,2) DEFAULT 0,
+        arrival_otp DECIMAL(5,2) DEFAULT 0,
+        avg_departure_variance INTEGER DEFAULT 0,
+        avg_arrival_variance INTEGER DEFAULT 0,
+        hub_breakdown JSONB,
+        contractor_breakdown JSONB,
+        delayed_movements JSONB,
+        generated_at TIMESTAMP DEFAULT NOW(),
+        notes TEXT
+      );
+
+      -- ============ COSTING & PO TABLES ============
+
+      -- Contractors (subcontractors and internal)
+      CREATE TABLE IF NOT EXISTS contractors (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        address_line1 VARCHAR(100),
+        address_line2 VARCHAR(100),
+        city VARCHAR(50),
+        postcode VARCHAR(20),
+        contact_name VARCHAR(100),
+        contact_email VARCHAR(100),
+        contact_phone VARCHAR(30),
+        po_email VARCHAR(100),
+        vat_registered BOOLEAN DEFAULT true,
+        vat_number VARCHAR(30),
+        payment_terms INTEGER DEFAULT 30,
+        is_internal BOOLEAN DEFAULT false,
+        active BOOLEAN DEFAULT true,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Locations (hubs, depots, delivery points)
+      CREATE TABLE IF NOT EXISTS locations (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        address_line1 VARCHAR(100),
+        address_line2 VARCHAR(100),
+        city VARCHAR(50),
+        postcode VARCHAR(20),
+        location_type VARCHAR(20) DEFAULT 'depot',
+        active BOOLEAN DEFAULT true,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Route Costs (cost per route, per contractor, per day type)
+      CREATE TABLE IF NOT EXISTS route_costs (
+        id SERIAL PRIMARY KEY,
+        route_ref VARCHAR(20) NOT NULL,
+        contractor_code VARCHAR(20) NOT NULL REFERENCES contractors(code),
+        day_type VARCHAR(20) NOT NULL DEFAULT 'weekday',
+        base_cost DECIMAL(10,2) NOT NULL,
+        effective_from DATE DEFAULT CURRENT_DATE,
+        effective_to DATE,
+        active BOOLEAN DEFAULT true,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(route_ref, contractor_code, day_type, effective_from)
+      );
+
+      -- Company Settings (DX company details)
+      CREATE TABLE IF NOT EXISTS company_settings (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR(50) UNIQUE NOT NULL,
+        setting_value TEXT,
+        setting_type VARCHAR(20) DEFAULT 'text',
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Bank Holidays (manually flagged dates)
+      CREATE TABLE IF NOT EXISTS bank_holidays (
+        id SERIAL PRIMARY KEY,
+        holiday_date DATE UNIQUE NOT NULL,
+        description VARCHAR(100),
+        created_by VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Purchase Orders
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id SERIAL PRIMARY KEY,
+        po_number VARCHAR(20) UNIQUE NOT NULL,
+        contractor_id INTEGER NOT NULL REFERENCES contractors(id),
+        week_commencing DATE NOT NULL,
+        week_ending DATE NOT NULL,
+        subtotal DECIMAL(10,2) DEFAULT 0,
+        fsc_total DECIMAL(10,2) DEFAULT 0,
+        vat_amount DECIMAL(10,2) DEFAULT 0,
+        grand_total DECIMAL(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'draft',
+        created_by INTEGER REFERENCES users(id),
+        authorised_by INTEGER REFERENCES users(id),
+        authorised_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        sent_to VARCHAR(100),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Purchase Order Lines
+      CREATE TABLE IF NOT EXISTS purchase_order_lines (
+        id SERIAL PRIMARY KEY,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        movement_date DATE NOT NULL,
+        route_ref VARCHAR(20) NOT NULL,
+        trunk_id VARCHAR(20),
+        day_type VARCHAR(20) NOT NULL,
+        origin VARCHAR(100),
+        destination VARCHAR(100),
+        scheduled_dep VARCHAR(5),
+        scheduled_arr VARCHAR(5),
+        route_legs JSONB,
+        base_cost DECIMAL(10,2) NOT NULL,
+        fsc_amount DECIMAL(10,2) DEFAULT 0,
+        line_total DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Credit Notes
+      CREATE TABLE IF NOT EXISTS credit_notes (
+        id SERIAL PRIMARY KEY,
+        credit_number VARCHAR(20) UNIQUE NOT NULL,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id),
+        contractor_id INTEGER NOT NULL REFERENCES contractors(id),
+        reason TEXT NOT NULL,
+        subtotal DECIMAL(10,2) DEFAULT 0,
+        fsc_total DECIMAL(10,2) DEFAULT 0,
+        vat_amount DECIMAL(10,2) DEFAULT 0,
+        grand_total DECIMAL(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'draft',
+        created_by INTEGER REFERENCES users(id),
+        authorised_by INTEGER REFERENCES users(id),
+        authorised_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        sent_to VARCHAR(100),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Credit Note Lines
+      CREATE TABLE IF NOT EXISTS credit_note_lines (
+        id SERIAL PRIMARY KEY,
+        credit_id INTEGER NOT NULL REFERENCES credit_notes(id) ON DELETE CASCADE,
+        original_po_line_id INTEGER REFERENCES purchase_order_lines(id),
+        movement_date DATE NOT NULL,
+        route_ref VARCHAR(20) NOT NULL,
+        trunk_id VARCHAR(20),
+        reason VARCHAR(100),
+        base_cost DECIMAL(10,2) NOT NULL,
+        fsc_amount DECIMAL(10,2) DEFAULT 0,
+        line_total DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- PO Sequence Counter
+      CREATE TABLE IF NOT EXISTS po_sequence (
+        id SERIAL PRIMARY KEY,
+        year INTEGER NOT NULL,
+        last_number INTEGER DEFAULT 0,
+        UNIQUE(year)
+      );
+
+      -- Credit Note Sequence Counter
+      CREATE TABLE IF NOT EXISTS credit_sequence (
+        id SERIAL PRIMARY KEY,
+        year INTEGER NOT NULL,
+        last_number INTEGER DEFAULT 0,
+        UNIQUE(year)
+      );
+
       -- Indexes for performance
       CREATE INDEX IF NOT EXISTS idx_movements_date ON trunk_movements(movement_date);
       CREATE INDEX IF NOT EXISTS idx_movements_status ON trunk_movements(status);
@@ -141,8 +321,12 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-      CREATE INDEX IF NOT EXISTS idx_amendments_date ON schedule_amendments(amendment_date);
-      CREATE INDEX IF NOT EXISTS idx_amendments_trunk ON schedule_amendments(trunk_id);
+      CREATE INDEX IF NOT EXISTS idx_route_costs_route ON route_costs(route_ref);
+      CREATE INDEX IF NOT EXISTS idx_route_costs_contractor ON route_costs(contractor_code);
+      CREATE INDEX IF NOT EXISTS idx_po_contractor ON purchase_orders(contractor_id);
+      CREATE INDEX IF NOT EXISTS idx_po_week ON purchase_orders(week_commencing);
+      CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status);
+      CREATE INDEX IF NOT EXISTS idx_bank_holidays_date ON bank_holidays(holiday_date);
     `);
     
     console.log('Tables created successfully');
@@ -164,7 +348,53 @@ async function initDatabase() {
         // Column might already exist, ignore error
       }
     }
-    console.log('Security and planning columns added');
+    console.log('Schema columns updated');
+
+    // Initialize company settings if not exists
+    const settingsToInit = [
+      { key: 'company_name', value: 'DX Network Services Ltd', type: 'text' },
+      { key: 'company_address_line1', value: '', type: 'text' },
+      { key: 'company_address_line2', value: '', type: 'text' },
+      { key: 'company_city', value: '', type: 'text' },
+      { key: 'company_postcode', value: '', type: 'text' },
+      { key: 'invoice_address_line1', value: '', type: 'text' },
+      { key: 'invoice_address_line2', value: '', type: 'text' },
+      { key: 'invoice_city', value: '', type: 'text' },
+      { key: 'invoice_postcode', value: '', type: 'text' },
+      { key: 'query_contact_name', value: '', type: 'text' },
+      { key: 'query_contact_email', value: '', type: 'text' },
+      { key: 'query_contact_phone', value: '', type: 'text' },
+      { key: 'vat_rate', value: '20', type: 'number' },
+      { key: 'fuel_surcharge_percent', value: '15', type: 'number' },
+      { key: 'payment_terms_days', value: '30', type: 'number' },
+      { key: 'payment_terms_text', value: 'Payment due within 30 days of invoice date', type: 'text' }
+    ];
+
+    for (const setting of settingsToInit) {
+      try {
+        await pool.query(
+          `INSERT INTO company_settings (setting_key, setting_value, setting_type) 
+           VALUES ($1, $2, $3) 
+           ON CONFLICT (setting_key) DO NOTHING`,
+          [setting.key, setting.value, setting.type]
+        );
+      } catch (e) {
+        // Ignore if exists
+      }
+    }
+    console.log('Company settings initialized');
+
+    // Initialize PO sequence for current year
+    const currentYear = new Date().getFullYear();
+    await pool.query(
+      `INSERT INTO po_sequence (year, last_number) VALUES ($1, 0) ON CONFLICT (year) DO NOTHING`,
+      [currentYear]
+    );
+    await pool.query(
+      `INSERT INTO credit_sequence (year, last_number) VALUES ($1, 0) ON CONFLICT (year) DO NOTHING`,
+      [currentYear]
+    );
+    console.log('PO/Credit sequences initialized');
 
     // Check if admin user exists
     const adminCheck = await pool.query("SELECT * FROM users WHERE username = 'admin'");
@@ -206,7 +436,7 @@ async function initDatabase() {
     // Log initialization
     await pool.query(
       'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
-      ['System', 'Database Init', 'Database initialized with security features and planning support v3.0']
+      ['System', 'Database Init', 'Database initialized with costing features v4.0']
     );
 
     console.log('Database initialization complete!');

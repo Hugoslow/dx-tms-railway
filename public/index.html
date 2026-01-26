@@ -199,6 +199,7 @@
                             <option value="hub-ops">Hub Operations</option>
                             <option value="supervisor">Supervisor</option>
                             <option value="planner">Planner</option>
+                            <option value="finance">Finance</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
@@ -547,6 +548,7 @@
                 <button onclick="showView('hub-operations')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-hub-operations" data-view="hub-operations"><i data-lucide="warehouse" class="w-4 h-4"></i>Hub Operations</button>
                 <button onclick="showView('audit-log')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-audit-log" data-view="audit-log"><i data-lucide="file-text" class="w-4 h-4"></i>Audit Log</button>
                 <button onclick="showView('metrics')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-metrics" data-view="metrics"><i data-lucide="bar-chart-3" class="w-4 h-4"></i>Metrics</button>
+                <button onclick="showView('costing')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-costing" data-view="costing"><i data-lucide="pound-sterling" class="w-4 h-4"></i>Costing</button>
                 <button onclick="showView('users')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-users" data-view="users"><i data-lucide="users" class="w-4 h-4"></i>Users</button>
             </div>
         </div>
@@ -951,10 +953,391 @@
                     </tr></thead><tbody id="usersBody"></tbody></table></div>
                 </div>
             </div>
+
+            <!-- Costing View -->
+            <div id="view-costing" class="view-panel hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div class="px-4 py-3 border-b border-slate-200">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="pound-sterling" class="w-5 h-5"></i>Costing & Purchase Orders</h3>
+                        </div>
+                        <!-- Costing Sub-tabs -->
+                        <div class="flex flex-wrap gap-1">
+                            <button onclick="showCostingTab('contractors')" class="costing-tab-btn active px-3 py-1.5 rounded text-sm font-medium bg-[#0066B3] text-white" data-tab="contractors">Contractors</button>
+                            <button onclick="showCostingTab('locations')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="locations">Locations</button>
+                            <button onclick="showCostingTab('route-costs')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="route-costs">Route Costs</button>
+                            <button onclick="showCostingTab('bank-holidays')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="bank-holidays">Bank Holidays</button>
+                            <button onclick="showCostingTab('settings')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="settings">Settings</button>
+                            <button onclick="showCostingTab('purchase-orders')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="purchase-orders">Purchase Orders</button>
+                            <button onclick="showCostingTab('credit-notes')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="credit-notes">Credit Notes</button>
+                            <button onclick="showCostingTab('reports')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="reports">Reports</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Contractors Tab -->
+                    <div id="costing-tab-contractors" class="costing-tab-panel p-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Contractors / Subcontractors</h4>
+                            <button onclick="openContractorModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Contractor</button>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Code</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Name</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contact</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Email</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Type</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actions</th>
+                        </tr></thead><tbody id="contractorsBody"></tbody></table></div>
+                    </div>
+                    
+                    <!-- Locations Tab -->
+                    <div id="costing-tab-locations" class="costing-tab-panel p-4 hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Locations / Depots</h4>
+                            <button onclick="openLocationModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Location</button>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Code</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Name</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Address</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">City</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Postcode</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Type</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actions</th>
+                        </tr></thead><tbody id="locationsBody"></tbody></table></div>
+                    </div>
+                    
+                    <!-- Route Costs Tab -->
+                    <div id="costing-tab-route-costs" class="costing-tab-panel p-4 hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Route Costs</h4>
+                            <button onclick="openRouteCostModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Route Cost</button>
+                        </div>
+                        <div class="flex gap-4 mb-4">
+                            <select id="filterRouteCostContractor" onchange="loadRouteCosts()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm">
+                                <option value="">All Contractors</option>
+                            </select>
+                            <select id="filterRouteCostRoute" onchange="loadRouteCosts()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm">
+                                <option value="">All Routes</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Route</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contractor</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Day Type</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Base Cost</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Effective From</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actions</th>
+                        </tr></thead><tbody id="routeCostsBody"></tbody></table></div>
+                    </div>
+                    
+                    <!-- Bank Holidays Tab -->
+                    <div id="costing-tab-bank-holidays" class="costing-tab-panel p-4 hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Bank Holidays</h4>
+                            <button onclick="openBankHolidayModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Bank Holiday</button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="bankHolidaysGrid"></div>
+                    </div>
+                    
+                    <!-- Settings Tab -->
+                    <div id="costing-tab-settings" class="costing-tab-panel p-4 hidden">
+                        <h4 class="font-medium text-slate-700 mb-4">Company Settings</h4>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="space-y-4">
+                                <h5 class="font-medium text-slate-600 border-b pb-2">Company Details</h5>
+                                <div><label class="block text-sm text-slate-600 mb-1">Company Name</label><input type="text" id="settingCompanyName" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Address Line 1</label><input type="text" id="settingCompanyAddress1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Address Line 2</label><input type="text" id="settingCompanyAddress2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label class="block text-sm text-slate-600 mb-1">City</label><input type="text" id="settingCompanyCity" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                    <div><label class="block text-sm text-slate-600 mb-1">Postcode</label><input type="text" id="settingCompanyPostcode" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                </div>
+                            </div>
+                            <div class="space-y-4">
+                                <h5 class="font-medium text-slate-600 border-b pb-2">Invoice Address</h5>
+                                <div><label class="block text-sm text-slate-600 mb-1">Address Line 1</label><input type="text" id="settingInvoiceAddress1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Address Line 2</label><input type="text" id="settingInvoiceAddress2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label class="block text-sm text-slate-600 mb-1">City</label><input type="text" id="settingInvoiceCity" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                    <div><label class="block text-sm text-slate-600 mb-1">Postcode</label><input type="text" id="settingInvoicePostcode" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                </div>
+                            </div>
+                            <div class="space-y-4">
+                                <h5 class="font-medium text-slate-600 border-b pb-2">Query Contact</h5>
+                                <div><label class="block text-sm text-slate-600 mb-1">Contact Name</label><input type="text" id="settingQueryContactName" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Email</label><input type="email" id="settingQueryContactEmail" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Phone</label><input type="text" id="settingQueryContactPhone" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                            </div>
+                            <div class="space-y-4">
+                                <h5 class="font-medium text-slate-600 border-b pb-2">Financial Settings</h5>
+                                <div><label class="block text-sm text-slate-600 mb-1">VAT Rate (%)</label><input type="number" id="settingVatRate" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" step="0.1"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Fuel Surcharge (%)</label><input type="number" id="settingFscPercent" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" step="0.1"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Payment Terms (Days)</label><input type="number" id="settingPaymentDays" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Payment Terms Text</label><input type="text" id="settingPaymentText" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end">
+                            <button onclick="saveCompanySettings()" class="px-4 py-2 bg-[#0066B3] text-white rounded-lg text-sm font-medium hover:bg-[#004B87]">Save Settings</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Purchase Orders Tab -->
+                    <div id="costing-tab-purchase-orders" class="costing-tab-panel p-4 hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Purchase Orders</h4>
+                            <button onclick="openCreatePOModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Create PO</button>
+                        </div>
+                        <div class="flex gap-4 mb-4">
+                            <select id="filterPOStatus" onchange="loadPurchaseOrders()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm">
+                                <option value="">All Status</option>
+                                <option value="draft">Draft</option>
+                                <option value="authorised">Authorised</option>
+                                <option value="sent">Sent</option>
+                            </select>
+                            <select id="filterPOContractor" onchange="loadPurchaseOrders()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm">
+                                <option value="">All Contractors</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">PO Number</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contractor</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Week</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Total</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Created</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actions</th>
+                        </tr></thead><tbody id="purchaseOrdersBody"></tbody></table></div>
+                    </div>
+                    
+                    <!-- Credit Notes Tab -->
+                    <div id="costing-tab-credit-notes" class="costing-tab-panel p-4 hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Credit Notes</h4>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Credit No.</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Against PO</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contractor</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Total</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Created</th>
+                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Actions</th>
+                        </tr></thead><tbody id="creditNotesBody"></tbody></table></div>
+                    </div>
+                    
+                    <!-- Reports Tab -->
+                    <div id="costing-tab-reports" class="costing-tab-panel p-4 hidden">
+                        <h4 class="font-medium text-slate-700 mb-4">Cost Reports</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 rounded-lg p-4">
+                                <h5 class="font-medium text-slate-600 mb-3">Weekly Cost Report</h5>
+                                <div class="space-y-3">
+                                    <div><label class="block text-sm text-slate-600 mb-1">From Date</label><input type="date" id="reportFromDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                    <div><label class="block text-sm text-slate-600 mb-1">To Date</label><input type="date" id="reportToDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                                    <button onclick="exportCostReport()" class="w-full px-4 py-2 bg-[#0066B3] text-white rounded-lg text-sm font-medium hover:bg-[#004B87] flex items-center justify-center gap-2"><i data-lucide="download" class="w-4 h-4"></i>Export to Excel</button>
+                                </div>
+                            </div>
+                            <div class="bg-slate-50 rounded-lg p-4">
+                                <h5 class="font-medium text-slate-600 mb-3">Report Summary</h5>
+                                <div id="reportSummary" class="text-sm text-slate-600">
+                                    <p>Select date range and generate report to see summary.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
     <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg hidden slide-in flex items-center gap-3 z-50"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-400" id="toastIcon"></i><span id="toastMessage"></span></div>
+
+    <!-- Contractor Modal -->
+    <div id="contractorModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="dx-header px-6 py-4 flex items-center justify-between sticky top-0">
+                <h2 id="contractorModalTitle" class="text-xl font-bold text-white">Add Contractor</h2>
+                <button onclick="closeContractorModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="contractorForm" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Code *</label><input type="text" id="contractorCode" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm uppercase"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Name *</label><input type="text" id="contractorName" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Address Line 1</label><input type="text" id="contractorAddress1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Address Line 2</label><input type="text" id="contractorAddress2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">City</label><input type="text" id="contractorCity" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Postcode</label><input type="text" id="contractorPostcode" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Contact Name</label><input type="text" id="contractorContactName" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Contact Phone</label><input type="text" id="contractorContactPhone" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Contact Email</label><input type="email" id="contractorContactEmail" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">PO Email (if different)</label><input type="email" id="contractorPOEmail" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">VAT Number</label><input type="text" id="contractorVatNumber" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Payment Terms (Days)</label><input type="number" id="contractorPaymentTerms" value="30" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div class="flex items-end gap-4">
+                        <label class="flex items-center gap-2"><input type="checkbox" id="contractorVatRegistered" checked class="rounded"><span class="text-sm">VAT Registered</span></label>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2"><input type="checkbox" id="contractorIsInternal" class="rounded"><span class="text-sm">Internal (PAYE Staff)</span></label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="contractorActive" checked class="rounded"><span class="text-sm">Active</span></label>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea id="contractorNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></textarea></div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeContractorModal()" class="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                    <button type="button" onclick="saveContractor()" class="flex-1 py-2 bg-[#0066B3] text-white rounded-lg font-medium hover:bg-[#004B87]">Save Contractor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Location Modal -->
+    <div id="locationModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 id="locationModalTitle" class="text-xl font-bold text-white">Add Location</h2>
+                <button onclick="closeLocationModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="locationForm" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Code *</label><input type="text" id="locationCode" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm uppercase"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Name *</label><input type="text" id="locationName" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Address Line 1</label><input type="text" id="locationAddress1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Address Line 2</label><input type="text" id="locationAddress2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">City</label><input type="text" id="locationCity" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Postcode</label><input type="text" id="locationPostcode" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                        <select id="locationType" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="hub">Hub</option>
+                            <option value="depot" selected>Depot</option>
+                            <option value="customer">Customer</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end"><label class="flex items-center gap-2"><input type="checkbox" id="locationActive" checked class="rounded"><span class="text-sm">Active</span></label></div>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea id="locationNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></textarea></div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeLocationModal()" class="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                    <button type="button" onclick="saveLocation()" class="flex-1 py-2 bg-[#0066B3] text-white rounded-lg font-medium hover:bg-[#004B87]">Save Location</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Route Cost Modal -->
+    <div id="routeCostModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 id="routeCostModalTitle" class="text-xl font-bold text-white">Add Route Cost</h2>
+                <button onclick="closeRouteCostModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="routeCostForm" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Route *</label>
+                        <select id="routeCostRoute" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="">Select Route</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Contractor *</label>
+                        <select id="routeCostContractor" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="">Select Contractor</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Day Type *</label>
+                        <select id="routeCostDayType" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="weekday">Weekday</option>
+                            <option value="weekend">Weekend</option>
+                            <option value="bank_holiday">Bank Holiday</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Base Cost (£) *</label><input type="number" id="routeCostBaseCost" required step="0.01" min="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Effective From</label><input type="date" id="routeCostEffectiveFrom" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                    <div><label class="block text-sm font-medium text-slate-700 mb-1">Effective To</label><input type="date" id="routeCostEffectiveTo" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                </div>
+                <div class="flex items-center gap-2"><input type="checkbox" id="routeCostActive" checked class="rounded"><label class="text-sm">Active</label></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea id="routeCostNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></textarea></div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeRouteCostModal()" class="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                    <button type="button" onclick="saveRouteCost()" class="flex-1 py-2 bg-[#0066B3] text-white rounded-lg font-medium hover:bg-[#004B87]">Save Route Cost</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bank Holiday Modal -->
+    <div id="bankHolidayModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white">Add Bank Holiday</h2>
+                <button onclick="closeBankHolidayModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="bankHolidayForm" class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Date *</label><input type="date" id="bankHolidayDate" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Description</label><input type="text" id="bankHolidayDescription" placeholder="e.g. Christmas Day" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeBankHolidayModal()" class="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                    <button type="button" onclick="saveBankHoliday()" class="flex-1 py-2 bg-[#0066B3] text-white rounded-lg font-medium hover:bg-[#004B87]">Add Holiday</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create PO Modal -->
+    <div id="createPOModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div class="dx-header px-6 py-4 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white">Create Purchase Order</h2>
+                <button onclick="closeCreatePOModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Contractor *</label>
+                    <select id="poContractor" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                        <option value="">Select Contractor</option>
+                    </select>
+                </div>
+                <div><label class="block text-sm font-medium text-slate-700 mb-1">Week Commencing (Monday) *</label><input type="date" id="poWeekCommencing" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"></div>
+                <button type="button" onclick="previewPO()" class="w-full py-2 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-700">Preview PO</button>
+                
+                <div id="poPreview" class="hidden border border-slate-200 rounded-lg p-4 mt-4">
+                    <h4 class="font-medium text-slate-800 mb-3">PO Preview</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between"><span class="text-slate-600">Contractor:</span><span id="poPreviewContractor" class="font-medium"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">Week:</span><span id="poPreviewWeek" class="font-medium"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">Routes:</span><span id="poPreviewLineCount" class="font-medium"></span></div>
+                        <hr class="my-2">
+                        <div class="flex justify-between"><span class="text-slate-600">Subtotal:</span><span id="poPreviewSubtotal" class="font-medium"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">FSC:</span><span id="poPreviewFSC" class="font-medium"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">VAT:</span><span id="poPreviewVAT" class="font-medium"></span></div>
+                        <div class="flex justify-between text-lg"><span class="font-medium">Total:</span><span id="poPreviewTotal" class="font-bold text-[#0066B3]"></span></div>
+                    </div>
+                    <div class="mt-4"><label class="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea id="poNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="Optional notes for this PO"></textarea></div>
+                </div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeCreatePOModal()" class="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                    <button type="button" onclick="createPO()" class="flex-1 py-2 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600">Create PO</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // ============ GLOBAL STATE ============
@@ -977,22 +1360,24 @@
         
         const hubs = ['NUNEATON HUB 1', 'HUB 2 NUNEATON', 'BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
         const rolePermissions = { 
-            'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false,
+            'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule'] },
-            'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false,
+            'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure'] },
-            'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false,
+            'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['schedule', 'hub-arrival'] },
-            'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false,
+            'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'hub-arrival', 'hub-operations', 'metrics'] },
-            'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false,
+            'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics'] },
-            'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics'] },
-            'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'users'] }
+            'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics', 'costing'] },
+            'finance': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: true, canViewFuture: true, canCopyDates: false, canViewCosts: true, canRaisePO: false, canAuthorisePO: false, canPullReports: true, canManageCosts: false,
+                tabs: ['dashboard', 'live-board', 'schedule', 'metrics', 'costing'] },
+            'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: true, canPullReports: true, canManageCosts: true,
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'costing', 'users'] }
         };
-        const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'planner': 'Planner', 'admin': 'Admin' };
+        const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'planner': 'Planner', 'finance': 'Finance', 'admin': 'Admin' };
         function getPermissions() { return currentUser ? rolePermissions[currentUser.role] || rolePermissions['viewer'] : rolePermissions['viewer']; }
 
         // ============ API HELPER WITH AUTH ============
@@ -2267,6 +2652,11 @@
                 initCompareDates();
             }
             
+            // Load costing data when switching to costing view
+            if (viewName === 'costing' && getPermissions().canViewCosts) {
+                loadContractors();
+            }
+            
             lucide.createIcons();
         }
         
@@ -2745,6 +3135,830 @@
             } catch (err) {
                 console.error('Compare error:', err);
                 showToast('Failed to compare dates. Make sure reports exist for both dates.', 'error');
+            }
+        }
+
+        // ============ COSTING MODULE ============
+        
+        let contractors = [];
+        let locations = [];
+        let routeCosts = [];
+        let bankHolidays = [];
+        let companySettings = {};
+        let purchaseOrders = [];
+        let creditNotes = [];
+        let editingContractorId = null;
+        let editingLocationId = null;
+        let editingRouteCostId = null;
+        
+        // Show costing sub-tab
+        function showCostingTab(tabName) {
+            document.querySelectorAll('.costing-tab-panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.costing-tab-btn').forEach(b => {
+                b.classList.remove('bg-[#0066B3]', 'text-white');
+                b.classList.add('bg-slate-100', 'text-slate-600');
+            });
+            
+            document.getElementById(`costing-tab-${tabName}`).classList.remove('hidden');
+            const btn = document.querySelector(`.costing-tab-btn[data-tab="${tabName}"]`);
+            if (btn) {
+                btn.classList.remove('bg-slate-100', 'text-slate-600');
+                btn.classList.add('bg-[#0066B3]', 'text-white');
+            }
+            
+            // Load data for the tab
+            switch(tabName) {
+                case 'contractors': loadContractors(); break;
+                case 'locations': loadLocations(); break;
+                case 'route-costs': loadRouteCosts(); loadRouteCostFilters(); break;
+                case 'bank-holidays': loadBankHolidays(); break;
+                case 'settings': loadCompanySettings(); break;
+                case 'purchase-orders': loadPurchaseOrders(); loadPOFilters(); break;
+                case 'credit-notes': loadCreditNotes(); break;
+                case 'reports': initReportDates(); break;
+            }
+        }
+        
+        // ============ CONTRACTORS ============
+        
+        async function loadContractors() {
+            try {
+                contractors = await api('/contractors');
+                renderContractors();
+            } catch (err) {
+                console.error('Load contractors error:', err);
+                showToast('Failed to load contractors', 'error');
+            }
+        }
+        
+        function renderContractors() {
+            const body = document.getElementById('contractorsBody');
+            if (!body) return;
+            
+            body.innerHTML = contractors.map(c => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-sm">${c.code}</td>
+                    <td class="px-3 py-2">${c.name}</td>
+                    <td class="px-3 py-2">${c.contact_name || '-'}</td>
+                    <td class="px-3 py-2 text-sm">${c.po_email || c.contact_email || '-'}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${c.is_internal ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}">${c.is_internal ? 'Internal' : 'External'}</span></td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${c.active ? 'Active' : 'Inactive'}</span></td>
+                    <td class="px-3 py-2">
+                        <button onclick="editContractor(${c.id})" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function openContractorModal(id = null) {
+            editingContractorId = id;
+            const modal = document.getElementById('contractorModal');
+            const title = document.getElementById('contractorModalTitle');
+            
+            if (id) {
+                title.textContent = 'Edit Contractor';
+                const c = contractors.find(x => x.id === id);
+                if (c) {
+                    document.getElementById('contractorCode').value = c.code || '';
+                    document.getElementById('contractorName').value = c.name || '';
+                    document.getElementById('contractorAddress1').value = c.address_line1 || '';
+                    document.getElementById('contractorAddress2').value = c.address_line2 || '';
+                    document.getElementById('contractorCity').value = c.city || '';
+                    document.getElementById('contractorPostcode').value = c.postcode || '';
+                    document.getElementById('contractorContactName').value = c.contact_name || '';
+                    document.getElementById('contractorContactEmail').value = c.contact_email || '';
+                    document.getElementById('contractorContactPhone').value = c.contact_phone || '';
+                    document.getElementById('contractorPOEmail').value = c.po_email || '';
+                    document.getElementById('contractorVatRegistered').checked = c.vat_registered;
+                    document.getElementById('contractorVatNumber').value = c.vat_number || '';
+                    document.getElementById('contractorPaymentTerms').value = c.payment_terms || 30;
+                    document.getElementById('contractorIsInternal').checked = c.is_internal;
+                    document.getElementById('contractorActive').checked = c.active;
+                    document.getElementById('contractorNotes').value = c.notes || '';
+                }
+            } else {
+                title.textContent = 'Add Contractor';
+                document.getElementById('contractorForm').reset();
+                document.getElementById('contractorVatRegistered').checked = true;
+                document.getElementById('contractorActive').checked = true;
+                document.getElementById('contractorPaymentTerms').value = 30;
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeContractorModal() {
+            document.getElementById('contractorModal').classList.add('hidden');
+            editingContractorId = null;
+        }
+        
+        function editContractor(id) {
+            openContractorModal(id);
+        }
+        
+        async function saveContractor() {
+            const data = {
+                code: document.getElementById('contractorCode').value.toUpperCase(),
+                name: document.getElementById('contractorName').value,
+                address_line1: document.getElementById('contractorAddress1').value,
+                address_line2: document.getElementById('contractorAddress2').value,
+                city: document.getElementById('contractorCity').value,
+                postcode: document.getElementById('contractorPostcode').value,
+                contact_name: document.getElementById('contractorContactName').value,
+                contact_email: document.getElementById('contractorContactEmail').value,
+                contact_phone: document.getElementById('contractorContactPhone').value,
+                po_email: document.getElementById('contractorPOEmail').value,
+                vat_registered: document.getElementById('contractorVatRegistered').checked,
+                vat_number: document.getElementById('contractorVatNumber').value,
+                payment_terms: parseInt(document.getElementById('contractorPaymentTerms').value) || 30,
+                is_internal: document.getElementById('contractorIsInternal').checked,
+                active: document.getElementById('contractorActive').checked,
+                notes: document.getElementById('contractorNotes').value
+            };
+            
+            try {
+                if (editingContractorId) {
+                    await api(`/contractors/${editingContractorId}`, { method: 'PUT', body: JSON.stringify(data) });
+                    showToast('Contractor updated');
+                } else {
+                    await api('/contractors', { method: 'POST', body: JSON.stringify(data) });
+                    showToast('Contractor created');
+                }
+                closeContractorModal();
+                loadContractors();
+            } catch (err) {
+                console.error('Save contractor error:', err);
+                showToast('Failed to save contractor', 'error');
+            }
+        }
+        
+        // ============ LOCATIONS ============
+        
+        async function loadLocations() {
+            try {
+                locations = await api('/locations');
+                renderLocations();
+            } catch (err) {
+                console.error('Load locations error:', err);
+                showToast('Failed to load locations', 'error');
+            }
+        }
+        
+        function renderLocations() {
+            const body = document.getElementById('locationsBody');
+            if (!body) return;
+            
+            body.innerHTML = locations.map(l => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-sm">${l.code}</td>
+                    <td class="px-3 py-2">${l.name}</td>
+                    <td class="px-3 py-2 text-sm">${l.address_line1 || '-'}</td>
+                    <td class="px-3 py-2 text-sm">${l.city || '-'}</td>
+                    <td class="px-3 py-2 text-sm">${l.postcode || '-'}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-600">${l.location_type || 'depot'}</span></td>
+                    <td class="px-3 py-2">
+                        <button onclick="editLocation(${l.id})" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function openLocationModal(id = null) {
+            editingLocationId = id;
+            const modal = document.getElementById('locationModal');
+            const title = document.getElementById('locationModalTitle');
+            
+            if (id) {
+                title.textContent = 'Edit Location';
+                const l = locations.find(x => x.id === id);
+                if (l) {
+                    document.getElementById('locationCode').value = l.code || '';
+                    document.getElementById('locationName').value = l.name || '';
+                    document.getElementById('locationAddress1').value = l.address_line1 || '';
+                    document.getElementById('locationAddress2').value = l.address_line2 || '';
+                    document.getElementById('locationCity').value = l.city || '';
+                    document.getElementById('locationPostcode').value = l.postcode || '';
+                    document.getElementById('locationType').value = l.location_type || 'depot';
+                    document.getElementById('locationActive').checked = l.active;
+                    document.getElementById('locationNotes').value = l.notes || '';
+                }
+            } else {
+                title.textContent = 'Add Location';
+                document.getElementById('locationForm').reset();
+                document.getElementById('locationActive').checked = true;
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeLocationModal() {
+            document.getElementById('locationModal').classList.add('hidden');
+            editingLocationId = null;
+        }
+        
+        function editLocation(id) {
+            openLocationModal(id);
+        }
+        
+        async function saveLocation() {
+            const data = {
+                code: document.getElementById('locationCode').value.toUpperCase(),
+                name: document.getElementById('locationName').value,
+                address_line1: document.getElementById('locationAddress1').value,
+                address_line2: document.getElementById('locationAddress2').value,
+                city: document.getElementById('locationCity').value,
+                postcode: document.getElementById('locationPostcode').value,
+                location_type: document.getElementById('locationType').value,
+                active: document.getElementById('locationActive').checked,
+                notes: document.getElementById('locationNotes').value
+            };
+            
+            try {
+                if (editingLocationId) {
+                    await api(`/locations/${editingLocationId}`, { method: 'PUT', body: JSON.stringify(data) });
+                    showToast('Location updated');
+                } else {
+                    await api('/locations', { method: 'POST', body: JSON.stringify(data) });
+                    showToast('Location created');
+                }
+                closeLocationModal();
+                loadLocations();
+            } catch (err) {
+                console.error('Save location error:', err);
+                showToast('Failed to save location', 'error');
+            }
+        }
+        
+        // ============ ROUTE COSTS ============
+        
+        async function loadRouteCostFilters() {
+            try {
+                const contractorCodes = await api('/contractor-codes');
+                const routeRefs = await api('/route-refs');
+                
+                const contractorSelect = document.getElementById('filterRouteCostContractor');
+                const routeSelect = document.getElementById('filterRouteCostRoute');
+                
+                if (contractorSelect) {
+                    contractorSelect.innerHTML = '<option value="">All Contractors</option>' +
+                        contractorCodes.map(c => `<option value="${c}">${c}</option>`).join('');
+                }
+                
+                if (routeSelect) {
+                    routeSelect.innerHTML = '<option value="">All Routes</option>' +
+                        routeRefs.map(r => `<option value="${r}">${r}</option>`).join('');
+                }
+            } catch (err) {
+                console.error('Load filters error:', err);
+            }
+        }
+        
+        async function loadRouteCosts() {
+            try {
+                const contractor = document.getElementById('filterRouteCostContractor')?.value || '';
+                const route = document.getElementById('filterRouteCostRoute')?.value || '';
+                
+                let url = '/route-costs?active=true';
+                if (contractor) url += `&contractor_code=${contractor}`;
+                if (route) url += `&route_ref=${route}`;
+                
+                routeCosts = await api(url);
+                renderRouteCosts();
+            } catch (err) {
+                console.error('Load route costs error:', err);
+                showToast('Failed to load route costs', 'error');
+            }
+        }
+        
+        function renderRouteCosts() {
+            const body = document.getElementById('routeCostsBody');
+            if (!body) return;
+            
+            const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Holiday' };
+            
+            body.innerHTML = routeCosts.map(rc => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-sm">${rc.route_ref}</td>
+                    <td class="px-3 py-2">${rc.contractor_name || rc.contractor_code}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${rc.day_type === 'weekday' ? 'bg-slate-100' : rc.day_type === 'weekend' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}">${dayTypeLabels[rc.day_type] || rc.day_type}</span></td>
+                    <td class="px-3 py-2 font-medium">£${parseFloat(rc.base_cost).toFixed(2)}</td>
+                    <td class="px-3 py-2 text-sm">${rc.effective_from ? new Date(rc.effective_from).toLocaleDateString('en-GB') : '-'}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${rc.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${rc.active ? 'Active' : 'Inactive'}</span></td>
+                    <td class="px-3 py-2">
+                        <button onclick="editRouteCost(${rc.id})" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
+                        <button onclick="deleteRouteCost(${rc.id})" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function openRouteCostModal(id = null) {
+            editingRouteCostId = id;
+            const modal = document.getElementById('routeCostModal');
+            const title = document.getElementById('routeCostModalTitle');
+            
+            // Populate dropdowns
+            loadRouteCostModalDropdowns();
+            
+            if (id) {
+                title.textContent = 'Edit Route Cost';
+                const rc = routeCosts.find(x => x.id === id);
+                if (rc) {
+                    document.getElementById('routeCostRoute').value = rc.route_ref || '';
+                    document.getElementById('routeCostContractor').value = rc.contractor_code || '';
+                    document.getElementById('routeCostDayType').value = rc.day_type || 'weekday';
+                    document.getElementById('routeCostBaseCost').value = rc.base_cost || '';
+                    document.getElementById('routeCostEffectiveFrom').value = rc.effective_from ? rc.effective_from.split('T')[0] : '';
+                    document.getElementById('routeCostEffectiveTo').value = rc.effective_to ? rc.effective_to.split('T')[0] : '';
+                    document.getElementById('routeCostActive').checked = rc.active;
+                    document.getElementById('routeCostNotes').value = rc.notes || '';
+                }
+            } else {
+                title.textContent = 'Add Route Cost';
+                document.getElementById('routeCostForm').reset();
+                document.getElementById('routeCostActive').checked = true;
+                document.getElementById('routeCostEffectiveFrom').value = new Date().toISOString().split('T')[0];
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        async function loadRouteCostModalDropdowns() {
+            try {
+                const contractorCodes = await api('/contractor-codes');
+                const routeRefs = await api('/route-refs');
+                
+                document.getElementById('routeCostContractor').innerHTML = 
+                    '<option value="">Select Contractor</option>' +
+                    contractorCodes.map(c => `<option value="${c}">${c}</option>`).join('');
+                
+                document.getElementById('routeCostRoute').innerHTML = 
+                    '<option value="">Select Route</option>' +
+                    routeRefs.map(r => `<option value="${r}">${r}</option>`).join('');
+            } catch (err) {
+                console.error('Load dropdowns error:', err);
+            }
+        }
+        
+        function closeRouteCostModal() {
+            document.getElementById('routeCostModal').classList.add('hidden');
+            editingRouteCostId = null;
+        }
+        
+        function editRouteCost(id) {
+            openRouteCostModal(id);
+        }
+        
+        async function saveRouteCost() {
+            const data = {
+                route_ref: document.getElementById('routeCostRoute').value,
+                contractor_code: document.getElementById('routeCostContractor').value,
+                day_type: document.getElementById('routeCostDayType').value,
+                base_cost: parseFloat(document.getElementById('routeCostBaseCost').value),
+                effective_from: document.getElementById('routeCostEffectiveFrom').value || null,
+                effective_to: document.getElementById('routeCostEffectiveTo').value || null,
+                active: document.getElementById('routeCostActive').checked,
+                notes: document.getElementById('routeCostNotes').value
+            };
+            
+            if (!data.route_ref || !data.contractor_code || !data.base_cost) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            try {
+                if (editingRouteCostId) {
+                    await api(`/route-costs/${editingRouteCostId}`, { method: 'PUT', body: JSON.stringify(data) });
+                    showToast('Route cost updated');
+                } else {
+                    await api('/route-costs', { method: 'POST', body: JSON.stringify(data) });
+                    showToast('Route cost created');
+                }
+                closeRouteCostModal();
+                loadRouteCosts();
+            } catch (err) {
+                console.error('Save route cost error:', err);
+                showToast('Failed to save route cost', 'error');
+            }
+        }
+        
+        async function deleteRouteCost(id) {
+            if (!confirm('Are you sure you want to delete this route cost?')) return;
+            
+            try {
+                await api(`/route-costs/${id}`, { method: 'DELETE' });
+                showToast('Route cost deleted');
+                loadRouteCosts();
+            } catch (err) {
+                console.error('Delete route cost error:', err);
+                showToast('Failed to delete route cost', 'error');
+            }
+        }
+        
+        // ============ BANK HOLIDAYS ============
+        
+        async function loadBankHolidays() {
+            try {
+                const year = new Date().getFullYear();
+                bankHolidays = await api(`/bank-holidays?year=${year}`);
+                renderBankHolidays();
+            } catch (err) {
+                console.error('Load bank holidays error:', err);
+                showToast('Failed to load bank holidays', 'error');
+            }
+        }
+        
+        function renderBankHolidays() {
+            const grid = document.getElementById('bankHolidaysGrid');
+            if (!grid) return;
+            
+            if (bankHolidays.length === 0) {
+                grid.innerHTML = '<p class="text-slate-500 col-span-3">No bank holidays defined for this year.</p>';
+                return;
+            }
+            
+            grid.innerHTML = bankHolidays.map(bh => `
+                <div class="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-slate-800">${new Date(bh.holiday_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                        <p class="text-sm text-slate-500">${bh.description || 'Bank Holiday'}</p>
+                    </div>
+                    <button onclick="deleteBankHoliday(${bh.id})" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+            
+            lucide.createIcons();
+        }
+        
+        function openBankHolidayModal() {
+            document.getElementById('bankHolidayForm').reset();
+            document.getElementById('bankHolidayModal').classList.remove('hidden');
+        }
+        
+        function closeBankHolidayModal() {
+            document.getElementById('bankHolidayModal').classList.add('hidden');
+        }
+        
+        async function saveBankHoliday() {
+            const data = {
+                holiday_date: document.getElementById('bankHolidayDate').value,
+                description: document.getElementById('bankHolidayDescription').value
+            };
+            
+            if (!data.holiday_date) {
+                showToast('Please select a date', 'error');
+                return;
+            }
+            
+            try {
+                await api('/bank-holidays', { method: 'POST', body: JSON.stringify(data) });
+                showToast('Bank holiday added');
+                closeBankHolidayModal();
+                loadBankHolidays();
+            } catch (err) {
+                console.error('Save bank holiday error:', err);
+                showToast('Failed to save bank holiday', 'error');
+            }
+        }
+        
+        async function deleteBankHoliday(id) {
+            if (!confirm('Are you sure you want to delete this bank holiday?')) return;
+            
+            try {
+                await api(`/bank-holidays/${id}`, { method: 'DELETE' });
+                showToast('Bank holiday deleted');
+                loadBankHolidays();
+            } catch (err) {
+                console.error('Delete bank holiday error:', err);
+                showToast('Failed to delete bank holiday', 'error');
+            }
+        }
+        
+        // ============ COMPANY SETTINGS ============
+        
+        async function loadCompanySettings() {
+            try {
+                companySettings = await api('/company-settings');
+                
+                document.getElementById('settingCompanyName').value = companySettings.company_name || '';
+                document.getElementById('settingCompanyAddress1').value = companySettings.company_address_line1 || '';
+                document.getElementById('settingCompanyAddress2').value = companySettings.company_address_line2 || '';
+                document.getElementById('settingCompanyCity').value = companySettings.company_city || '';
+                document.getElementById('settingCompanyPostcode').value = companySettings.company_postcode || '';
+                document.getElementById('settingInvoiceAddress1').value = companySettings.invoice_address_line1 || '';
+                document.getElementById('settingInvoiceAddress2').value = companySettings.invoice_address_line2 || '';
+                document.getElementById('settingInvoiceCity').value = companySettings.invoice_city || '';
+                document.getElementById('settingInvoicePostcode').value = companySettings.invoice_postcode || '';
+                document.getElementById('settingQueryContactName').value = companySettings.query_contact_name || '';
+                document.getElementById('settingQueryContactEmail').value = companySettings.query_contact_email || '';
+                document.getElementById('settingQueryContactPhone').value = companySettings.query_contact_phone || '';
+                document.getElementById('settingVatRate').value = companySettings.vat_rate || 20;
+                document.getElementById('settingFscPercent').value = companySettings.fuel_surcharge_percent || 15;
+                document.getElementById('settingPaymentDays').value = companySettings.payment_terms_days || 30;
+                document.getElementById('settingPaymentText').value = companySettings.payment_terms_text || '';
+            } catch (err) {
+                console.error('Load company settings error:', err);
+                showToast('Failed to load company settings', 'error');
+            }
+        }
+        
+        async function saveCompanySettings() {
+            const data = {
+                company_name: document.getElementById('settingCompanyName').value,
+                company_address_line1: document.getElementById('settingCompanyAddress1').value,
+                company_address_line2: document.getElementById('settingCompanyAddress2').value,
+                company_city: document.getElementById('settingCompanyCity').value,
+                company_postcode: document.getElementById('settingCompanyPostcode').value,
+                invoice_address_line1: document.getElementById('settingInvoiceAddress1').value,
+                invoice_address_line2: document.getElementById('settingInvoiceAddress2').value,
+                invoice_city: document.getElementById('settingInvoiceCity').value,
+                invoice_postcode: document.getElementById('settingInvoicePostcode').value,
+                query_contact_name: document.getElementById('settingQueryContactName').value,
+                query_contact_email: document.getElementById('settingQueryContactEmail').value,
+                query_contact_phone: document.getElementById('settingQueryContactPhone').value,
+                vat_rate: document.getElementById('settingVatRate').value,
+                fuel_surcharge_percent: document.getElementById('settingFscPercent').value,
+                payment_terms_days: document.getElementById('settingPaymentDays').value,
+                payment_terms_text: document.getElementById('settingPaymentText').value
+            };
+            
+            try {
+                await api('/company-settings', { method: 'PUT', body: JSON.stringify(data) });
+                showToast('Company settings saved');
+            } catch (err) {
+                console.error('Save company settings error:', err);
+                showToast('Failed to save settings', 'error');
+            }
+        }
+        
+        // ============ PURCHASE ORDERS ============
+        
+        async function loadPOFilters() {
+            try {
+                const contractorsList = await api('/contractors?active=true');
+                const select = document.getElementById('filterPOContractor');
+                if (select) {
+                    select.innerHTML = '<option value="">All Contractors</option>' +
+                        contractorsList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                }
+            } catch (err) {
+                console.error('Load PO filters error:', err);
+            }
+        }
+        
+        async function loadPurchaseOrders() {
+            try {
+                const status = document.getElementById('filterPOStatus')?.value || '';
+                const contractor = document.getElementById('filterPOContractor')?.value || '';
+                
+                let url = '/purchase-orders?';
+                if (status) url += `status=${status}&`;
+                if (contractor) url += `contractor_id=${contractor}&`;
+                
+                purchaseOrders = await api(url);
+                renderPurchaseOrders();
+            } catch (err) {
+                console.error('Load purchase orders error:', err);
+                showToast('Failed to load purchase orders', 'error');
+            }
+        }
+        
+        function renderPurchaseOrders() {
+            const body = document.getElementById('purchaseOrdersBody');
+            if (!body) return;
+            
+            const statusColors = {
+                draft: 'bg-slate-100 text-slate-600',
+                authorised: 'bg-amber-100 text-amber-700',
+                sent: 'bg-emerald-100 text-emerald-700'
+            };
+            
+            body.innerHTML = purchaseOrders.map(po => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-sm font-medium">${po.po_number}</td>
+                    <td class="px-3 py-2">${po.contractor_name}</td>
+                    <td class="px-3 py-2 text-sm">${new Date(po.week_commencing).toLocaleDateString('en-GB')} - ${new Date(po.week_ending).toLocaleDateString('en-GB')}</td>
+                    <td class="px-3 py-2 font-medium">£${parseFloat(po.grand_total).toFixed(2)}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${statusColors[po.status] || 'bg-slate-100'}">${po.status}</span></td>
+                    <td class="px-3 py-2 text-sm">${new Date(po.created_at).toLocaleDateString('en-GB')}</td>
+                    <td class="px-3 py-2">
+                        <button onclick="viewPurchaseOrder(${po.id})" class="text-blue-600 hover:text-blue-800 text-sm mr-2">View</button>
+                        ${po.status === 'draft' && getPermissions().canAuthorisePO ? `<button onclick="authorisePO(${po.id})" class="text-emerald-600 hover:text-emerald-800 text-sm mr-2">Authorise</button>` : ''}
+                        ${po.status === 'authorised' ? `<button onclick="markPOSent(${po.id})" class="text-amber-600 hover:text-amber-800 text-sm">Mark Sent</button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function openCreatePOModal() {
+            document.getElementById('createPOModal').classList.remove('hidden');
+            loadCreatePOContractors();
+        }
+        
+        function closeCreatePOModal() {
+            document.getElementById('createPOModal').classList.add('hidden');
+            document.getElementById('poPreview').classList.add('hidden');
+        }
+        
+        async function loadCreatePOContractors() {
+            try {
+                const contractorsList = await api('/contractors?active=true');
+                const select = document.getElementById('poContractor');
+                select.innerHTML = '<option value="">Select Contractor</option>' +
+                    contractorsList.map(c => `<option value="${c.id}">${c.name} (${c.code})</option>`).join('');
+            } catch (err) {
+                console.error('Load contractors error:', err);
+            }
+        }
+        
+        async function previewPO() {
+            const contractor_id = document.getElementById('poContractor').value;
+            const week_commencing = document.getElementById('poWeekCommencing').value;
+            
+            if (!contractor_id || !week_commencing) {
+                showToast('Please select contractor and week', 'error');
+                return;
+            }
+            
+            try {
+                const preview = await api('/purchase-orders/preview', {
+                    method: 'POST',
+                    body: JSON.stringify({ contractor_id, week_commencing })
+                });
+                
+                window.currentPOPreview = preview;
+                
+                document.getElementById('poPreviewContractor').textContent = preview.contractor.name;
+                document.getElementById('poPreviewWeek').textContent = `${new Date(preview.week_commencing).toLocaleDateString('en-GB')} - ${new Date(preview.week_ending).toLocaleDateString('en-GB')}`;
+                document.getElementById('poPreviewSubtotal').textContent = `£${preview.subtotal}`;
+                document.getElementById('poPreviewFSC').textContent = `£${preview.fsc_total} (${preview.fsc_percent}%)`;
+                document.getElementById('poPreviewVAT').textContent = `£${preview.vat_amount} (${preview.vat_rate}%)`;
+                document.getElementById('poPreviewTotal').textContent = `£${preview.grand_total}`;
+                document.getElementById('poPreviewLineCount').textContent = `${preview.lines.length} route(s)`;
+                
+                document.getElementById('poPreview').classList.remove('hidden');
+            } catch (err) {
+                console.error('Preview PO error:', err);
+                showToast('Failed to preview PO', 'error');
+            }
+        }
+        
+        async function createPO() {
+            if (!window.currentPOPreview) {
+                showToast('Please preview PO first', 'error');
+                return;
+            }
+            
+            const preview = window.currentPOPreview;
+            
+            try {
+                const result = await api('/purchase-orders', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        contractor_id: preview.contractor.id,
+                        week_commencing: preview.week_commencing,
+                        lines: preview.lines,
+                        subtotal: preview.subtotal,
+                        fsc_total: preview.fsc_total,
+                        vat_amount: preview.vat_amount,
+                        grand_total: preview.grand_total,
+                        notes: document.getElementById('poNotes').value
+                    })
+                });
+                
+                showToast(`PO ${result.po_number} created`);
+                closeCreatePOModal();
+                loadPurchaseOrders();
+            } catch (err) {
+                console.error('Create PO error:', err);
+                showToast('Failed to create PO', 'error');
+            }
+        }
+        
+        async function viewPurchaseOrder(id) {
+            // TODO: Implement PO view/print modal
+            showToast('PO view coming soon');
+        }
+        
+        async function authorisePO(id) {
+            if (!confirm('Are you sure you want to authorise this PO?')) return;
+            
+            try {
+                await api(`/purchase-orders/${id}/authorise`, { method: 'PUT' });
+                showToast('PO authorised');
+                loadPurchaseOrders();
+            } catch (err) {
+                console.error('Authorise PO error:', err);
+                showToast('Failed to authorise PO', 'error');
+            }
+        }
+        
+        async function markPOSent(id) {
+            const email = prompt('Enter email address PO was sent to:');
+            if (!email) return;
+            
+            try {
+                await api(`/purchase-orders/${id}/sent`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ sent_to: email })
+                });
+                showToast('PO marked as sent');
+                loadPurchaseOrders();
+            } catch (err) {
+                console.error('Mark PO sent error:', err);
+                showToast('Failed to update PO', 'error');
+            }
+        }
+        
+        // ============ CREDIT NOTES ============
+        
+        async function loadCreditNotes() {
+            try {
+                creditNotes = await api('/credit-notes');
+                renderCreditNotes();
+            } catch (err) {
+                console.error('Load credit notes error:', err);
+                showToast('Failed to load credit notes', 'error');
+            }
+        }
+        
+        function renderCreditNotes() {
+            const body = document.getElementById('creditNotesBody');
+            if (!body) return;
+            
+            if (creditNotes.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">No credit notes found</td></tr>';
+                return;
+            }
+            
+            const statusColors = {
+                draft: 'bg-slate-100 text-slate-600',
+                authorised: 'bg-amber-100 text-amber-700',
+                sent: 'bg-emerald-100 text-emerald-700'
+            };
+            
+            body.innerHTML = creditNotes.map(cn => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-sm font-medium">${cn.credit_number}</td>
+                    <td class="px-3 py-2 font-mono text-sm">${cn.po_number}</td>
+                    <td class="px-3 py-2">${cn.contractor_name}</td>
+                    <td class="px-3 py-2 font-medium text-red-600">-£${parseFloat(cn.grand_total).toFixed(2)}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${statusColors[cn.status] || 'bg-slate-100'}">${cn.status}</span></td>
+                    <td class="px-3 py-2 text-sm">${new Date(cn.created_at).toLocaleDateString('en-GB')}</td>
+                    <td class="px-3 py-2">
+                        <button onclick="viewCreditNote(${cn.id})" class="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function viewCreditNote(id) {
+            showToast('Credit note view coming soon');
+        }
+        
+        // ============ REPORTS ============
+        
+        function initReportDates() {
+            const today = new Date();
+            const lastMonday = new Date(today);
+            lastMonday.setDate(today.getDate() - today.getDay() - 6);
+            const lastSunday = new Date(lastMonday);
+            lastSunday.setDate(lastMonday.getDate() + 6);
+            
+            document.getElementById('reportFromDate').value = lastMonday.toISOString().split('T')[0];
+            document.getElementById('reportToDate').value = lastSunday.toISOString().split('T')[0];
+        }
+        
+        async function exportCostReport() {
+            const fromDate = document.getElementById('reportFromDate').value;
+            const toDate = document.getElementById('reportToDate').value;
+            
+            if (!fromDate || !toDate) {
+                showToast('Please select date range', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/reports/weekly-export?from_date=${fromDate}&to_date=${toDate}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Export failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `TMS_Cost_Report_${fromDate}_to_${toDate}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showToast('Report downloaded');
+            } catch (err) {
+                console.error('Export error:', err);
+                showToast('Failed to export report', 'error');
             }
         }
     </script>

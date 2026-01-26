@@ -522,8 +522,9 @@
             <div class="px-4 py-2 bg-black/20 flex items-center gap-6 overflow-x-auto">
                 <div id="dateSelectorContainer" class="flex items-center gap-2 text-sm whitespace-nowrap">
                     <i data-lucide="calendar" class="w-4 h-4 text-blue-200"></i>
+                    <span id="currentDateLabel" class="font-semibold text-white">Today</span>
                     <input type="date" id="dateSelector" onchange="changeDate()" class="bg-white/10 border border-white/20 rounded px-2 py-1 text-white text-sm" title="Select date">
-                    <button onclick="goToToday()" class="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-xs" title="Go to today">Today</button>
+                    <button onclick="goToToday()" id="goToTodayBtn" class="hidden px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-medium" title="Go to today">← Today</button>
                     <button id="copyDateBtn" onclick="openCopyDateModal()" class="hidden px-2 py-1 bg-amber-500/80 hover:bg-amber-500 rounded text-xs" title="Copy from historical date"><i data-lucide="copy" class="w-3 h-3 inline"></i> Copy</button>
                 </div>
                 <span class="text-blue-300">|</span>
@@ -1529,18 +1530,30 @@
             selectedDate = newDate;
             
             // Visual indicator that we're viewing a different date
-            const perms = getPermissions();
             const today = datePermissions?.today;
+            const dateLabel = document.getElementById('currentDateLabel');
+            const goToTodayBtn = document.getElementById('goToTodayBtn');
             
-            if (newDate !== today) {
-                dateSelector.classList.add('ring-2', 'ring-amber-400');
-                // Update title to show schedule view for past/future
-                const schedTitle = document.getElementById('scheduleTitle');
-                if (schedTitle) schedTitle.textContent = `Schedule for ${formatDate(newDate)}`;
+            if (newDate === today) {
+                // Viewing today
+                dateLabel.textContent = 'Today';
+                dateLabel.className = 'font-semibold text-white';
+                dateSelector.classList.remove('ring-2', 'ring-amber-400', 'ring-blue-400');
+                goToTodayBtn.classList.add('hidden');
+            } else if (newDate < today) {
+                // Viewing past date
+                dateLabel.textContent = `Past: ${formatDateShort(newDate)}`;
+                dateLabel.className = 'font-semibold text-slate-300';
+                dateSelector.classList.remove('ring-amber-400');
+                dateSelector.classList.add('ring-2', 'ring-blue-400');
+                goToTodayBtn.classList.remove('hidden');
             } else {
-                dateSelector.classList.remove('ring-2', 'ring-amber-400');
-                const schedTitle = document.getElementById('scheduleTitle');
-                if (schedTitle) schedTitle.textContent = "Today's Schedule";
+                // Viewing future date
+                dateLabel.textContent = `Future: ${formatDateShort(newDate)}`;
+                dateLabel.className = 'font-semibold text-amber-300';
+                dateSelector.classList.remove('ring-blue-400');
+                dateSelector.classList.add('ring-2', 'ring-amber-400');
+                goToTodayBtn.classList.remove('hidden');
             }
             
             await refreshData();
@@ -1552,6 +1565,11 @@
                 dateSelector.value = datePermissions.today;
                 changeDate();
             }
+        }
+        
+        function formatDateShort(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
         }
         
         function formatDate(dateStr) {

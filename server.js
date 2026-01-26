@@ -427,17 +427,9 @@ app.get('/api/movements', authenticateToken, async (req, res) => {
       });
     }
     
-    // Check if movements exist for this date
-    const existingMovements = await pool.query(
-      'SELECT COUNT(*) FROM trunk_movements WHERE movement_date = $1',
-      [requestedDate]
-    );
-    
-    // If future date with no movements, generate from schedule + amendments
-    if (parseInt(existingMovements.rows[0].count) === 0 && requestedDate > today) {
-      await generateMovementsForDate(requestedDate);
-    }
-    
+    // Simply return whatever movements exist for this date
+    // Future dates will be empty until a planner copies/creates them
+    // or until the 10:30am reset creates them when that day arrives
     const result = await pool.query(
       `SELECT * FROM trunk_movements 
        WHERE movement_date = $1 
@@ -1189,6 +1181,8 @@ app.post('/api/users', authenticateToken, requireRole('admin'), async (req, res)
 // ============ DAILY RESET ENDPOINT (10:30am - uses Operational Day) ============
 
 // Reset daily movements from schedule (called by cron at 10:30)
+// IMPORTANT: If movements already exist for this day (e.g., created by a planner),
+// they are preserved and NO new movements are loaded from the master schedule.
 app.post('/api/reset-daily', async (req, res) => {
   try {
     const secretKey = req.headers['x-reset-key'];
@@ -1211,28 +1205,32 @@ app.post('/api/reset-daily', async (req, res) => {
       [previousDayStr]
     );
     
-    // Check what's already in today's movements (preserve any manually added)
+    // Check if movements already exist for today (e.g., created by planner)
     const existing = await pool.query(
-      `SELECT trunk_id FROM trunk_movements WHERE movement_date = $1`,
+      `SELECT COUNT(*) as count FROM trunk_movements WHERE movement_date = $1`,
       [operationalDay]
     );
-    const existingIds = existing.rows.map(r => r.trunk_id);
+    const existingCount = parseInt(existing.rows[0].count);
     
-    // Load fresh movements from schedule for the new operational day
-    let result;
-    if (existingIds.length > 0) {
-      result = await pool.query(
-        `INSERT INTO trunk_movements 
-         (trunk_id, route_ref, contractor, vehicle_type, origin, destination,
-          scheduled_dep, scheduled_arr, direction, status, movement_date)
-         SELECT trunk_id, route_ref, contractor, vehicle_type, origin, destination,
-                scheduled_dep, scheduled_arr, direction, 'scheduled', $1
-         FROM trunk_schedule
-         WHERE active = true AND trunk_id NOT IN (SELECT unnest($2::text[]))
-         RETURNING trunk_id`,
-        [operationalDay, existingIds]
+    let result = { rows: [] };
+    
+    if (existingCount > 0) {
+      // Movements already exist (planner has pre-created them) - DON'T overwrite
+      console.log(`Movements already exist for ${operationalDay} (${existingCount} found) - preserving planner's work`);
+      
+      await pool.query(
+        'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+        ['System', '10:30 Daily Reset', `Preserved ${existingCount} pre-planned movements for ${operationalDay}`]
       );
+      
+      res.json({ 
+        message: `Reset complete. Preserved ${existingCount} pre-planned movements for ${operationalDay}.`,
+        operationalDay,
+        movementsLoaded: 0,
+        existingPreserved: existingCount
+      });
     } else {
+      // No movements exist - load fresh from master schedule
       result = await pool.query(
         `INSERT INTO trunk_movements 
          (trunk_id, route_ref, contractor, vehicle_type, origin, destination,
@@ -1244,23 +1242,24 @@ app.post('/api/reset-daily', async (req, res) => {
          RETURNING trunk_id`,
         [operationalDay]
       );
+      
+      // Log the reset
+      await pool.query(
+        'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+        ['System', '10:30 Daily Reset', `Loaded ${result.rows.length} movements from master schedule for ${operationalDay}`]
+      );
+      
+      res.json({ 
+        message: `Reset complete. Loaded ${result.rows.length} movements for ${operationalDay}.`,
+        operationalDay,
+        movementsLoaded: result.rows.length,
+        existingPreserved: 0
+      });
     }
     
     // Clean up expired sessions
     await pool.query('DELETE FROM sessions WHERE expires_at < NOW()');
     
-    // Log the reset
-    await pool.query(
-      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
-      ['System', '10:30 Daily Reset', `Loaded ${result.rows.length} movements for operational day ${operationalDay}`]
-    );
-    
-    res.json({ 
-      message: `Reset complete. Loaded ${result.rows.length} movements for ${operationalDay}.`,
-      operationalDay,
-      movementsLoaded: result.rows.length,
-      existingPreserved: existingIds.length
-    });
   } catch (err) {
     console.error('Reset error:', err);
     res.status(500).json({ error: 'Server error' });

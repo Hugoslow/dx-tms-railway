@@ -884,11 +884,51 @@
                             </div>
                             <div class="flex items-end">
                                 <button onclick="exportReport()" class="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2">
-                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Download Excel
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Performance Report
                                 </button>
                             </div>
                         </div>
-                        <p class="text-xs text-slate-500">Report includes: Summary metrics, detailed trunk data, and daily trends (for multi-day reports)</p>
+                        <p class="text-xs text-slate-500">Performance report includes: Summary metrics, on-time percentages, and daily trends</p>
+                    </div>
+                </div>
+
+                <!-- Raw Data Export -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm mt-6">
+                    <div class="px-4 py-3 border-b border-slate-200">
+                        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="database" class="w-5 h-5"></i>Export Raw Data
+                        </h3>
+                    </div>
+                    <div class="p-4">
+                        <p class="text-sm text-slate-600 mb-4">Export all movement data including vehicle details, driver info, trailer numbers, fill percentages, and timing data.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Start Date</label>
+                                <input type="date" id="dataExportStartDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">End Date</label>
+                                <input type="date" id="dataExportEndDate" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Hub (Optional)</label>
+                                <select id="dataExportHub" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                                    <option value="all">All Hubs</option>
+                                    <option value="NUNEATON HUB 1">Nuneaton Hub 1</option>
+                                    <option value="HUB 2 NUNEATON">Hub 2 Nuneaton</option>
+                                    <option value="BRACKNELL HUB">Bracknell Hub</option>
+                                    <option value="BRISTOL HUB">Bristol Hub</option>
+                                    <option value="HAYDOCK HUB">Haydock Hub</option>
+                                    <option value="LEEDS HUB">Leeds Hub</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button onclick="exportRawData()" class="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2">
+                                    <i data-lucide="download" class="w-4 h-4"></i>Export Data
+                                </button>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">Includes: Vehicle reg, trailer, driver, fill %, seal, bay, all timestamps, and more</p>
                     </div>
                 </div>
             </div>
@@ -2222,6 +2262,7 @@
             if (viewName === 'metrics') {
                 refreshMetrics();
                 initReportDates();
+                initDataExportDates();
                 loadDailyReports();
                 initCompareDates();
             }
@@ -2411,6 +2452,57 @@
                 console.error('Export error:', err);
                 showToast('Failed to export report', 'error');
             }
+        }
+
+        async function exportRawData() {
+            const startDate = document.getElementById('dataExportStartDate').value;
+            const endDate = document.getElementById('dataExportEndDate').value;
+            const hub = document.getElementById('dataExportHub').value;
+            
+            if (!startDate || !endDate) {
+                showToast('Please select start and end dates', 'error');
+                return;
+            }
+            
+            if (startDate > endDate) {
+                showToast('Start date must be before end date', 'error');
+                return;
+            }
+            
+            try {
+                showToast('Exporting data...');
+                
+                // Fetch the file directly
+                const response = await fetch(`/api/export/data?startDate=${startDate}&endDate=${endDate}&hub=${hub}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!response.ok) throw new Error('Export failed');
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `TMS_Data_Export_${startDate}_to_${endDate}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('Data exported successfully');
+            } catch (err) {
+                console.error('Export error:', err);
+                showToast('Failed to export data', 'error');
+            }
+        }
+
+        function initDataExportDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dataExportStartDate').value = today;
+            document.getElementById('dataExportEndDate').value = today;
         }
 
         // ============ EDIT TRUNK FUNCTIONS ============

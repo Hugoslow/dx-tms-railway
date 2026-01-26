@@ -2311,6 +2311,187 @@ app.get('/api/report/export', authenticateToken, async (req, res) => {
   }
 });
 
+// ============ RAW DATA EXPORT ENDPOINT ============
+// Exports all movement data including operational fields (vehicle, trailer, driver, etc.)
+
+app.get('/api/export/data', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate, hub } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Start date and end date are required' });
+    }
+    
+    // Build query
+    let query = `SELECT * FROM trunk_movements WHERE movement_date >= $1 AND movement_date <= $2`;
+    const params = [startDate, endDate];
+    
+    if (hub && hub !== 'all') {
+      query += ` AND destination = $3`;
+      params.push(hub);
+    }
+    
+    query += ` ORDER BY movement_date, 
+      CASE WHEN scheduled_dep >= '10:30' THEN 0 ELSE 1 END,
+      scheduled_dep ASC`;
+    
+    const result = await pool.query(query, params);
+    const movements = result.rows;
+    
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'DX TMS';
+    workbook.created = new Date();
+    
+    // ============ ALL DATA SHEET ============
+    const dataSheet = workbook.addWorksheet('Movement Data');
+    
+    // Define all columns including operational data
+    const columns = [
+      { header: 'Date', key: 'movement_date', width: 12 },
+      { header: 'Trunk ID', key: 'trunk_id', width: 12 },
+      { header: 'Route Ref', key: 'route_ref', width: 10 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Direction', key: 'direction', width: 10 },
+      { header: 'Contractor', key: 'contractor', width: 15 },
+      { header: 'Vehicle Type', key: 'vehicle_type', width: 12 },
+      { header: 'Origin', key: 'origin', width: 18 },
+      { header: 'Destination', key: 'destination', width: 18 },
+      { header: 'Sched Dep', key: 'scheduled_dep', width: 10 },
+      { header: 'Actual Dep', key: 'actual_dep', width: 10 },
+      { header: 'Sched Arr', key: 'scheduled_arr', width: 10 },
+      { header: 'Gate Arrival', key: 'gate_arrival', width: 12 },
+      { header: 'Dock Time', key: 'dock_time', width: 10 },
+      { header: 'Tip Start', key: 'tip_start', width: 10 },
+      { header: 'Tip Complete', key: 'tip_complete', width: 12 },
+      { header: 'Vehicle Reg', key: 'vehicle_reg', width: 12 },
+      { header: 'Trailer', key: 'trailer', width: 12 },
+      { header: 'Driver', key: 'driver', width: 18 },
+      { header: 'Driver Mobile', key: 'driver_mobile', width: 14 },
+      { header: 'Bay', key: 'bay', width: 8 },
+      { header: 'Seal', key: 'seal', width: 12 },
+      { header: 'Fill %', key: 'fill_percent', width: 8 },
+      { header: 'Cages', key: 'cages', width: 8 },
+      { header: 'Cancel Reason', key: 'cancel_reason', width: 20 },
+      { header: 'Amended', key: 'is_amendment', width: 10 },
+      { header: 'Amendment Note', key: 'amendment_note', width: 25 }
+    ];
+    
+    dataSheet.columns = columns;
+    
+    // Style header row
+    const headerRow = dataSheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0066B3' } };
+    headerRow.alignment = { horizontal: 'center' };
+    
+    // Add data rows
+    movements.forEach(m => {
+      dataSheet.addRow({
+        movement_date: m.movement_date ? m.movement_date.toISOString().split('T')[0] : '',
+        trunk_id: m.trunk_id,
+        route_ref: m.route_ref || '',
+        status: m.status,
+        direction: m.direction,
+        contractor: m.contractor || '',
+        vehicle_type: m.vehicle_type || '',
+        origin: m.origin,
+        destination: m.destination,
+        scheduled_dep: m.scheduled_dep || '',
+        actual_dep: m.actual_dep || '',
+        scheduled_arr: m.scheduled_arr || '',
+        gate_arrival: m.gate_arrival || '',
+        dock_time: m.dock_time || '',
+        tip_start: m.tip_start || '',
+        tip_complete: m.tip_complete || '',
+        vehicle_reg: m.vehicle_reg || '',
+        trailer: m.trailer || '',
+        driver: m.driver || '',
+        driver_mobile: m.driver_mobile || '',
+        bay: m.bay || '',
+        seal: m.seal || '',
+        fill_percent: m.fill_percent || '',
+        cages: m.cages || '',
+        cancel_reason: m.cancel_reason || '',
+        is_amendment: m.is_amendment ? 'Yes' : 'No',
+        amendment_note: m.amendment_note || ''
+      });
+    });
+    
+    // Add auto-filter
+    dataSheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: movements.length + 1, column: columns.length }
+    };
+    
+    // Freeze header row
+    dataSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    
+    // ============ SUMMARY SHEET ============
+    const summarySheet = workbook.addWorksheet('Summary');
+    
+    summarySheet.mergeCells('A1:D1');
+    summarySheet.getCell('A1').value = 'DX Trunking Data Export';
+    summarySheet.getCell('A1').font = { bold: true, size: 16 };
+    
+    summarySheet.getCell('A3').value = 'Date Range:';
+    summarySheet.getCell('A3').font = { bold: true };
+    summarySheet.getCell('B3').value = `${startDate} to ${endDate}`;
+    
+    summarySheet.getCell('A4').value = 'Total Records:';
+    summarySheet.getCell('A4').font = { bold: true };
+    summarySheet.getCell('B4').value = movements.length;
+    
+    summarySheet.getCell('A5').value = 'Hub Filter:';
+    summarySheet.getCell('A5').font = { bold: true };
+    summarySheet.getCell('B5').value = hub || 'All Hubs';
+    
+    summarySheet.getCell('A6').value = 'Exported:';
+    summarySheet.getCell('A6').font = { bold: true };
+    summarySheet.getCell('B6').value = new Date().toLocaleString('en-GB');
+    
+    summarySheet.getCell('A7').value = 'Exported By:';
+    summarySheet.getCell('A7').font = { bold: true };
+    summarySheet.getCell('B7').value = req.user.fullName;
+    
+    // Status breakdown
+    summarySheet.getCell('A9').value = 'Status Breakdown';
+    summarySheet.getCell('A9').font = { bold: true, size: 12 };
+    
+    const statusCounts = {};
+    movements.forEach(m => {
+      statusCounts[m.status] = (statusCounts[m.status] || 0) + 1;
+    });
+    
+    let row = 10;
+    Object.entries(statusCounts).sort().forEach(([status, count]) => {
+      summarySheet.getCell(`A${row}`).value = status;
+      summarySheet.getCell(`B${row}`).value = count;
+      row++;
+    });
+    
+    summarySheet.getColumn(1).width = 15;
+    summarySheet.getColumn(2).width = 25;
+    
+    // Send file
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=TMS_Data_Export_${startDate}_to_${endDate}.xlsx`);
+    
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    // Log export
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Data Export', `Exported ${movements.length} records: ${startDate} to ${endDate}`]
+    );
+    
+  } catch (err) {
+    console.error('Data export error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ SERVE FRONTEND ============
 
 app.get('*', (req, res) => {

@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -3657,6 +3658,595 @@ app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('ca
   } catch (err) {
     console.error('Generate PO PDF error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ EMAIL FUNCTIONS ============
+
+// Helper function to generate PO HTML email
+function generatePOEmailHTML(po, lines, settings) {
+  const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Holiday' };
+  
+  // Build line items HTML
+  let linesHTML = '';
+  for (const line of lines) {
+    let legsHTML = '';
+    if (line.route_legs && Array.isArray(line.route_legs)) {
+      for (const leg of line.route_legs) {
+        legsHTML += `
+          <div style="font-size: 11px; padding: 4px 0; border-bottom: 1px solid #e2e8f0;">
+            <div><span style="color: #64748b;">${leg.scheduled_dep || ''}</span> <strong>${leg.origin || ''}</strong></div>
+            ${leg.origin_address ? `<div style="font-size: 10px; color: #94a3b8;">${leg.origin_address.address_line1 || ''}, ${leg.origin_address.city || ''} ${leg.origin_address.postcode || ''}</div>` : ''}
+            <div style="color: #94a3b8;">→</div>
+            <div><span style="color: #64748b;">${leg.scheduled_arr || ''}</span> <strong>${leg.destination || ''}</strong></div>
+            ${leg.destination_address ? `<div style="font-size: 10px; color: #94a3b8;">${leg.destination_address.address_line1 || ''}, ${leg.destination_address.city || ''} ${leg.destination_address.postcode || ''}</div>` : ''}
+          </div>
+        `;
+      }
+    }
+    
+    linesHTML += `
+      <tr style="border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 12px 8px; font-size: 12px;">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
+        <td style="padding: 12px 8px; font-family: monospace; font-weight: 600;">${line.route_ref || '-'}</td>
+        <td style="padding: 12px 8px; font-size: 11px;">${dayTypeLabels[line.day_type] || line.day_type}</td>
+        <td style="padding: 12px 8px;">${legsHTML || '-'}</td>
+        <td style="padding: 12px 8px; text-align: right; font-weight: 600;">£${parseFloat(line.line_total).toFixed(2)}</td>
+      </tr>
+    `;
+  }
+  
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase Order ${po.po_number}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f1f5f9;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #0066B3 0%, #00A0E3 100%); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">PURCHASE ORDER</h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 18px;">${po.po_number}</p>
+            </td>
+          </tr>
+          
+          <!-- Status Badge -->
+          <tr>
+            <td style="padding: 20px 30px 0 30px; text-align: right;">
+              <span style="display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; ${po.status === 'authorised' ? 'background-color: #fef3c7; color: #d97706;' : po.status === 'sent' ? 'background-color: #d1fae5; color: #059669;' : 'background-color: #f1f5f9; color: #64748b;'}">${po.status}</span>
+            </td>
+          </tr>
+          
+          <!-- From/To Section -->
+          <tr>
+            <td style="padding: 20px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="50%" valign="top" style="padding-right: 15px;">
+                    <p style="color: #0066B3; font-weight: bold; font-size: 12px; margin: 0 0 8px 0; text-transform: uppercase;">From:</p>
+                    <p style="margin: 0; font-weight: bold; color: #1e293b;">${settings.company_name || 'DX Network Services Ltd'}</p>
+                    <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${settings.company_address_line1 || ''}</p>
+                    ${settings.company_address_line2 ? `<p style="margin: 4px 0; color: #64748b; font-size: 13px;">${settings.company_address_line2}</p>` : ''}
+                    <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${settings.company_city || ''} ${settings.company_postcode || ''}</p>
+                  </td>
+                  <td width="50%" valign="top" style="padding-left: 15px; border-left: 1px solid #e2e8f0;">
+                    <p style="color: #0066B3; font-weight: bold; font-size: 12px; margin: 0 0 8px 0; text-transform: uppercase;">To:</p>
+                    <p style="margin: 0; font-weight: bold; color: #1e293b;">${po.contractor_name}</p>
+                    <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${po.contractor_address1 || ''}</p>
+                    ${po.contractor_address2 ? `<p style="margin: 4px 0; color: #64748b; font-size: 13px;">${po.contractor_address2}</p>` : ''}
+                    <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${po.contractor_city || ''} ${po.contractor_postcode || ''}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- PO Details Box -->
+          <tr>
+            <td style="padding: 0 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 6px;">
+                <tr>
+                  <td style="padding: 15px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="50%">
+                          <p style="margin: 0; font-size: 12px;"><strong>PO Date:</strong> ${new Date(po.created_at).toLocaleDateString('en-GB')}</p>
+                          <p style="margin: 8px 0 0 0; font-size: 12px;"><strong>Week:</strong> ${new Date(po.week_commencing).toLocaleDateString('en-GB')} - ${new Date(po.week_ending).toLocaleDateString('en-GB')}</p>
+                        </td>
+                        <td width="50%">
+                          <p style="margin: 0; font-size: 12px;"><strong>Created By:</strong> ${po.created_by_name || '-'}</p>
+                          ${po.authorised_by_name ? `<p style="margin: 8px 0 0 0; font-size: 12px;"><strong>Authorised By:</strong> ${po.authorised_by_name}</p>` : ''}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Line Items -->
+          <tr>
+            <td style="padding: 20px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+                <thead>
+                  <tr style="background-color: #0066B3;">
+                    <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Date</th>
+                    <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Route</th>
+                    <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Day</th>
+                    <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Details</th>
+                    <th style="padding: 12px 8px; text-align: right; color: #ffffff; font-size: 11px; font-weight: 600;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${linesHTML}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Totals -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="250" cellpadding="0" cellspacing="0" align="right" style="background-color: #f8fafc; border-radius: 6px;">
+                <tr>
+                  <td style="padding: 15px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 4px 0; font-size: 13px;">Subtotal:</td>
+                        <td style="padding: 4px 0; font-size: 13px; text-align: right;">£${parseFloat(po.subtotal).toFixed(2)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-size: 13px;">FSC (${settings.fuel_surcharge_percent || 15}%):</td>
+                        <td style="padding: 4px 0; font-size: 13px; text-align: right;">£${parseFloat(po.fsc_total).toFixed(2)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-size: 13px;">VAT (${settings.vat_rate || 20}%):</td>
+                        <td style="padding: 4px 0; font-size: 13px; text-align: right;">£${parseFloat(po.vat_amount).toFixed(2)}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="border-top: 2px solid #0066B3; padding-top: 10px; margin-top: 10px;"></td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-size: 16px; font-weight: bold; color: #0066B3;">TOTAL:</td>
+                        <td style="padding: 4px 0; font-size: 16px; font-weight: bold; color: #0066B3; text-align: right;">£${parseFloat(po.grand_total).toFixed(2)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Payment Terms -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <p style="margin: 0; font-size: 12px; color: #0066B3; font-weight: bold;">Payment Terms:</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">${settings.payment_terms_text || 'Payment due within 30 days of invoice date'}</p>
+            </td>
+          </tr>
+          
+          <!-- Invoice Address -->
+          ${settings.invoice_address_line1 ? `
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <p style="margin: 0; font-size: 12px; color: #0066B3; font-weight: bold;">Invoice Address:</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
+                ${settings.invoice_address_line1 || ''}<br>
+                ${settings.invoice_address_line2 ? settings.invoice_address_line2 + '<br>' : ''}
+                ${settings.invoice_city || ''} ${settings.invoice_postcode || ''}
+              </p>
+            </td>
+          </tr>
+          ` : ''}
+          
+          <!-- Notes -->
+          ${po.notes ? `
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <div style="background-color: #fef3c7; padding: 12px; border-radius: 6px; border-left: 4px solid #f59e0b;">
+                <p style="margin: 0; font-size: 12px; color: #92400e;"><strong>Notes:</strong> ${po.notes}</p>
+              </div>
+            </td>
+          </tr>
+          ` : ''}
+          
+          <!-- Query Contact -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <p style="margin: 0; font-size: 11px; color: #64748b;">
+                For queries regarding this purchase order, please contact:<br>
+                <strong>${settings.query_contact_name || ''}</strong> - 
+                ${settings.query_contact_email || ''} - 
+                ${settings.query_contact_phone || ''}
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #1e293b; padding: 20px 30px; text-align: center;">
+              <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                This purchase order was generated by DX Trunking Management System<br>
+                ${new Date().toLocaleString('en-GB')}
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+  
+  return html;
+}
+
+// Helper function to generate PDF as buffer for email attachment
+async function generatePOPdfBuffer(po, lines, settings) {
+  return new Promise((resolve, reject) => {
+    try {
+      const chunks = [];
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        margin: 50,
+        info: {
+          Title: `Purchase Order ${po.po_number}`,
+          Author: 'DX Trunking Management System'
+        }
+      });
+      
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      
+      // Colors
+      const dxBlue = '#0066B3';
+      const darkGray = '#333333';
+      const lightGray = '#666666';
+      
+      // Try to add logo
+      const logoPath = path.join(__dirname, 'public', 'dx_freight_logo.jpg');
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 50, 40, { width: 100 });
+      }
+      
+      // Header
+      doc.fontSize(24).fillColor(dxBlue).text('PURCHASE ORDER', 200, 50, { align: 'right' });
+      doc.fontSize(14).fillColor(darkGray).text(po.po_number, 200, 80, { align: 'right' });
+      doc.fontSize(10).fillColor(po.status === 'sent' ? '#10b981' : '#f59e0b')
+         .text(po.status.toUpperCase(), 200, 100, { align: 'right' });
+      
+      doc.moveTo(50, 130).lineTo(545, 130).strokeColor(dxBlue).lineWidth(2).stroke();
+      
+      // FROM section
+      let yPos = 150;
+      doc.fontSize(10).fillColor(dxBlue).font('Helvetica-Bold').text('FROM:', 50, yPos);
+      yPos += 15;
+      doc.fontSize(10).fillColor(darkGray).text(settings.company_name || 'DX Network Services Ltd', 50, yPos);
+      yPos += 12;
+      doc.font('Helvetica').fontSize(9).fillColor(lightGray);
+      if (settings.company_address_line1) { doc.text(settings.company_address_line1, 50, yPos); yPos += 11; }
+      if (settings.company_city || settings.company_postcode) { 
+        doc.text(`${settings.company_city || ''} ${settings.company_postcode || ''}`.trim(), 50, yPos); 
+      }
+      
+      // TO section
+      yPos = 150;
+      doc.fontSize(10).fillColor(dxBlue).font('Helvetica-Bold').text('TO:', 300, yPos);
+      yPos += 15;
+      doc.fontSize(10).fillColor(darkGray).font('Helvetica-Bold').text(po.contractor_name, 300, yPos);
+      yPos += 12;
+      doc.font('Helvetica').fontSize(9).fillColor(lightGray);
+      if (po.contractor_address1) { doc.text(po.contractor_address1, 300, yPos); yPos += 11; }
+      if (po.contractor_city || po.contractor_postcode) { 
+        doc.text(`${po.contractor_city || ''} ${po.contractor_postcode || ''}`.trim(), 300, yPos); 
+      }
+      
+      // Details box
+      yPos = 240;
+      doc.rect(50, yPos, 495, 40).fillColor('#f8fafc').fill();
+      doc.fillColor(darkGray).fontSize(9);
+      doc.font('Helvetica-Bold').text('Week:', 60, yPos + 12);
+      doc.font('Helvetica').text(`${new Date(po.week_commencing).toLocaleDateString('en-GB')} - ${new Date(po.week_ending).toLocaleDateString('en-GB')}`, 100, yPos + 12);
+      
+      // Line items header
+      yPos = 300;
+      doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
+      doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+      doc.text('Date', 55, yPos + 6);
+      doc.text('Route', 110, yPos + 6);
+      doc.text('Day Type', 170, yPos + 6);
+      doc.text('Details', 240, yPos + 6);
+      doc.text('Total', 490, yPos + 6, { width: 50, align: 'right' });
+      yPos += 20;
+      
+      const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Hol' };
+      
+      for (const line of lines) {
+        if (yPos > 700) {
+          doc.addPage();
+          yPos = 50;
+        }
+        
+        doc.fillColor(darkGray).fontSize(8).font('Helvetica');
+        doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 5);
+        doc.font('Helvetica-Bold').text(line.route_ref || '-', 110, yPos + 5);
+        doc.font('Helvetica').text(dayTypeLabels[line.day_type] || line.day_type, 170, yPos + 5);
+        
+        // Legs
+        let legY = yPos + 5;
+        if (line.route_legs && Array.isArray(line.route_legs)) {
+          for (const leg of line.route_legs) {
+            doc.fontSize(7).text(`${leg.scheduled_dep || ''} ${leg.origin || ''} → ${leg.scheduled_arr || ''} ${leg.destination || ''}`, 240, legY, { width: 180 });
+            legY += 10;
+          }
+        }
+        
+        doc.fontSize(8).font('Helvetica-Bold').text(`£${parseFloat(line.line_total).toFixed(2)}`, 490, yPos + 5, { width: 50, align: 'right' });
+        yPos += Math.max(30, legY - yPos + 10);
+      }
+      
+      // Totals
+      yPos += 20;
+      if (yPos > 650) { doc.addPage(); yPos = 50; }
+      
+      doc.rect(350, yPos, 195, 90).strokeColor(dxBlue).lineWidth(1).stroke();
+      doc.fontSize(9).font('Helvetica').fillColor(darkGray);
+      doc.text('Subtotal:', 360, yPos + 10);
+      doc.text(`£${parseFloat(po.subtotal).toFixed(2)}`, 450, yPos + 10, { width: 80, align: 'right' });
+      doc.text(`FSC (${settings.fuel_surcharge_percent || 15}%):`, 360, yPos + 25);
+      doc.text(`£${parseFloat(po.fsc_total).toFixed(2)}`, 450, yPos + 25, { width: 80, align: 'right' });
+      doc.text(`VAT (${settings.vat_rate || 20}%):`, 360, yPos + 40);
+      doc.text(`£${parseFloat(po.vat_amount).toFixed(2)}`, 450, yPos + 40, { width: 80, align: 'right' });
+      doc.moveTo(360, yPos + 55).lineTo(535, yPos + 55).strokeColor(darkGray).lineWidth(0.5).stroke();
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(dxBlue);
+      doc.text('TOTAL:', 360, yPos + 65);
+      doc.text(`£${parseFloat(po.grand_total).toFixed(2)}`, 450, yPos + 65, { width: 80, align: 'right' });
+      
+      // Footer
+      doc.fontSize(7).fillColor(lightGray);
+      doc.text(`Generated by DX TMS on ${new Date().toLocaleString('en-GB')}`, 50, 780, { align: 'center', width: 495 });
+      
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// Get email preview HTML
+app.get('/api/purchase-orders/:id/email-preview', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const poResult = await pool.query(
+      `SELECT po.*, c.name as contractor_name, c.code as contractor_code, 
+       c.address_line1 as contractor_address1, c.address_line2 as contractor_address2, 
+       c.city as contractor_city, c.postcode as contractor_postcode,
+       c.contact_name as contractor_contact, c.po_email as contractor_email, 
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM purchase_orders po
+       LEFT JOIN contractors c ON po.contractor_id = c.id
+       LEFT JOIN users u1 ON po.created_by = u1.id
+       LEFT JOIN users u2 ON po.authorised_by = u2.id
+       WHERE po.id = $1`,
+      [req.params.id]
+    );
+    
+    if (poResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found' });
+    }
+    
+    const po = poResult.rows[0];
+    
+    const linesResult = await pool.query(
+      'SELECT * FROM purchase_order_lines WHERE po_id = $1 ORDER BY movement_date, route_ref',
+      [req.params.id]
+    );
+    
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    const html = generatePOEmailHTML(po, linesResult.rows, settings);
+    
+    res.json({ 
+      html,
+      to: po.contractor_email,
+      subject: `Purchase Order ${po.po_number} - ${settings.company_name || 'DX Network Services'}`
+    });
+  } catch (err) {
+    console.error('Email preview error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Send PO via email
+app.post('/api/purchase-orders/:id/send-email', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  try {
+    const { to_email, cc_email, custom_message } = req.body;
+    
+    // Get PO details
+    const poResult = await pool.query(
+      `SELECT po.*, c.name as contractor_name, c.code as contractor_code, 
+       c.address_line1 as contractor_address1, c.address_line2 as contractor_address2, 
+       c.city as contractor_city, c.postcode as contractor_postcode,
+       c.contact_name as contractor_contact, c.po_email as contractor_email, 
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM purchase_orders po
+       LEFT JOIN contractors c ON po.contractor_id = c.id
+       LEFT JOIN users u1 ON po.created_by = u1.id
+       LEFT JOIN users u2 ON po.authorised_by = u2.id
+       WHERE po.id = $1`,
+      [req.params.id]
+    );
+    
+    if (poResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Purchase order not found' });
+    }
+    
+    const po = poResult.rows[0];
+    
+    // Check PO is authorised
+    if (po.status === 'draft') {
+      return res.status(400).json({ error: 'PO must be authorised before sending' });
+    }
+    
+    const linesResult = await pool.query(
+      'SELECT * FROM purchase_order_lines WHERE po_id = $1 ORDER BY movement_date, route_ref',
+      [req.params.id]
+    );
+    
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    // Check email configuration
+    const smtpHost = settings.smtp_host || process.env.SMTP_HOST;
+    const smtpPort = settings.smtp_port || process.env.SMTP_PORT || 587;
+    const smtpUser = settings.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settings.smtp_pass || process.env.SMTP_PASS;
+    const smtpFrom = settings.smtp_from || process.env.SMTP_FROM || settings.query_contact_email;
+    
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.status(400).json({ 
+        error: 'Email not configured. Please set SMTP settings in environment variables or company settings.',
+        requiresConfig: true
+      });
+    }
+    
+    // Create email transporter
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort),
+      secure: parseInt(smtpPort) === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+    
+    // Generate HTML and PDF
+    const htmlContent = generatePOEmailHTML(po, linesResult.rows, settings);
+    const pdfBuffer = await generatePOPdfBuffer(po, linesResult.rows, settings);
+    
+    // Build email
+    const recipientEmail = to_email || po.contractor_email;
+    if (!recipientEmail) {
+      return res.status(400).json({ error: 'No recipient email address specified' });
+    }
+    
+    const mailOptions = {
+      from: `"${settings.company_name || 'DX Network Services'}" <${smtpFrom}>`,
+      to: recipientEmail,
+      cc: cc_email || undefined,
+      subject: `Purchase Order ${po.po_number} - Week ${new Date(po.week_commencing).toLocaleDateString('en-GB')}`,
+      html: htmlContent,
+      attachments: [
+        {
+          filename: `PO_${po.po_number}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    };
+    
+    // Send email
+    await transporter.sendMail(mailOptions);
+    
+    // Update PO status to sent
+    await pool.query(
+      `UPDATE purchase_orders 
+       SET status = 'sent', sent_at = NOW(), sent_to = $1 
+       WHERE id = $2`,
+      [recipientEmail, req.params.id]
+    );
+    
+    // Log action
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'PO Emailed', `Sent ${po.po_number} to ${recipientEmail}`]
+    );
+    
+    res.json({ 
+      message: `PO ${po.po_number} sent successfully to ${recipientEmail}`,
+      sent_to: recipientEmail
+    });
+    
+  } catch (err) {
+    console.error('Send PO email error:', err);
+    res.status(500).json({ error: 'Failed to send email: ' + err.message });
+  }
+});
+
+// Test email configuration
+app.post('/api/email/test', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const { test_email } = req.body;
+    
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    const smtpHost = settings.smtp_host || process.env.SMTP_HOST;
+    const smtpPort = settings.smtp_port || process.env.SMTP_PORT || 587;
+    const smtpUser = settings.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settings.smtp_pass || process.env.SMTP_PASS;
+    const smtpFrom = settings.smtp_from || process.env.SMTP_FROM || settings.query_contact_email;
+    
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.status(400).json({ 
+        error: 'Email not configured. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS in environment variables.' 
+      });
+    }
+    
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort),
+      secure: parseInt(smtpPort) === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+    
+    await transporter.sendMail({
+      from: `"DX TMS" <${smtpFrom}>`,
+      to: test_email,
+      subject: 'DX TMS - Email Configuration Test',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #0066B3;">Email Configuration Test</h2>
+          <p>This is a test email from the DX Trunking Management System.</p>
+          <p>If you received this email, your email configuration is working correctly.</p>
+          <p style="color: #666; font-size: 12px; margin-top: 20px;">
+            Sent at: ${new Date().toLocaleString('en-GB')}<br>
+            SMTP Host: ${smtpHost}
+          </p>
+        </div>
+      `
+    });
+    
+    res.json({ message: `Test email sent successfully to ${test_email}` });
+    
+  } catch (err) {
+    console.error('Test email error:', err);
+    res.status(500).json({ error: 'Failed to send test email: ' + err.message });
   }
 });
 

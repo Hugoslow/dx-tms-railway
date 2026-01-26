@@ -13,6 +13,7 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (Railway)
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));

@@ -4389,7 +4389,7 @@ app.put('/api/credit-notes/:id/authorise', authenticateToken, requirePermission(
 app.get('/api/credit-notes/:id', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
   try {
     const cnResult = await pool.query(
-      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email,
+      `SELECT cn.*, c.name as contractor_name, c.po_email as contractor_email,
        c.address_line1 as contractor_address1, c.city as contractor_city, c.postcode as contractor_postcode,
        po.po_number, po.week_commencing, po.week_ending,
        u1.full_name as created_by_name, u2.full_name as authorised_by_name
@@ -4427,7 +4427,7 @@ app.get('/api/credit-notes/:id/pdf', authenticateToken, requirePermission('canVi
   try {
     // Get credit note details
     const cnResult = await pool.query(
-      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email, c.code as contractor_code,
+      `SELECT cn.*, c.name as contractor_name, c.po_email as contractor_email, c.code as contractor_code,
        c.address_line1 as contractor_address1, c.address_line2 as contractor_address2,
        c.city as contractor_city, c.postcode as contractor_postcode, c.vat_number as contractor_vat,
        po.po_number, po.week_commencing, po.week_ending,
@@ -4616,7 +4616,7 @@ app.post('/api/credit-notes/:id/send-email', authenticateToken, requirePermissio
     
     // Get credit note
     const cnResult = await pool.query(
-      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email, c.code as contractor_code,
+      `SELECT cn.*, c.name as contractor_name, c.po_email as contractor_email, c.code as contractor_code,
        c.address_line1 as contractor_address1, c.address_line2 as contractor_address2,
        c.city as contractor_city, c.postcode as contractor_postcode, c.vat_number as contractor_vat,
        po.po_number, po.week_commencing, po.week_ending,

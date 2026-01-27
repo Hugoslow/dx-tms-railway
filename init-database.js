@@ -247,6 +247,7 @@ async function initDatabase() {
         movement_date DATE NOT NULL,
         route_ref VARCHAR(20) NOT NULL,
         trunk_id VARCHAR(20),
+        vehicle_type VARCHAR(20) DEFAULT 'ARTIC',
         day_type VARCHAR(20) NOT NULL,
         origin VARCHAR(100),
         destination VARCHAR(100),

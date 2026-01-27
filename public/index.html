@@ -4047,6 +4047,7 @@
                         <tr class="border-b border-slate-100">
                             <td class="px-2 py-2 text-sm">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
                             <td class="px-2 py-2 font-mono text-sm font-medium">${line.route_ref || '-'}</td>
+                            <td class="px-2 py-2 text-xs">${line.vehicle_type || 'ARTIC'}</td>
                             <td class="px-2 py-2 text-xs">${dayTypeLabels[line.day_type] || line.day_type}</td>
                             <td class="px-2 py-2">${legsHtml || '<span class="text-slate-400">No details</span>'}</td>
                             <td class="px-2 py-2 text-right font-medium">£${parseFloat(line.line_total).toFixed(2)}</td>
@@ -4077,6 +4078,7 @@
                                 <tr>
                                     <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Date</th>
                                     <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Route</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Vehicle</th>
                                     <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Day</th>
                                     <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Legs</th>
                                     <th class="px-2 py-2 text-right text-xs font-medium text-slate-500">Total</th>

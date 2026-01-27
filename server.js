@@ -3174,7 +3174,7 @@ app.post('/api/purchase-orders/preview', authenticateToken, requirePermission('c
         
         // Get all legs for this route
         const legsResult = await pool.query(
-          `SELECT trunk_id, origin, destination, scheduled_dep, scheduled_arr
+          `SELECT trunk_id, origin, destination, scheduled_dep, scheduled_arr, vehicle_type
            FROM trunk_schedule 
            WHERE route_ref = $1 AND contractor = $2 AND active = true
            ORDER BY scheduled_dep`,
@@ -3194,7 +3194,8 @@ app.post('/api/purchase-orders/preview', authenticateToken, requirePermission('c
             destination: leg.destination,
             destination_address: destLoc.rows[0] || null,
             scheduled_dep: leg.scheduled_dep,
-            scheduled_arr: leg.scheduled_arr
+            scheduled_arr: leg.scheduled_arr,
+            vehicle_type: leg.vehicle_type
           });
         }
         
@@ -3202,6 +3203,7 @@ app.post('/api/purchase-orders/preview', authenticateToken, requirePermission('c
           movement_date: dateStr,
           route_ref: routeRef,
           trunk_id: legs[0]?.trunk_id,
+          vehicle_type: legs[0]?.vehicle_type || 'ARTIC',
           day_type: dayType,
           origin: legs[0]?.origin,
           destination: legs[legs.length - 1]?.destination,
@@ -3271,9 +3273,9 @@ app.post('/api/purchase-orders', authenticateToken, requirePermission('canRaiseP
     // Create PO lines
     for (const line of lines) {
       await client.query(
-        `INSERT INTO purchase_order_lines (po_id, movement_date, route_ref, trunk_id, day_type, origin, destination, scheduled_dep, scheduled_arr, route_legs, base_cost, fsc_amount, line_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [poId, line.movement_date, line.route_ref, line.trunk_id, line.day_type, line.origin, line.destination, line.scheduled_dep, line.scheduled_arr, JSON.stringify(line.route_legs), line.base_cost, line.fsc_amount, line.line_total]
+        `INSERT INTO purchase_order_lines (po_id, movement_date, route_ref, trunk_id, vehicle_type, day_type, origin, destination, scheduled_dep, scheduled_arr, route_legs, base_cost, fsc_amount, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [poId, line.movement_date, line.route_ref, line.trunk_id, line.vehicle_type || 'ARTIC', line.day_type, line.origin, line.destination, line.scheduled_dep, line.scheduled_arr, JSON.stringify(line.route_legs), line.base_cost, line.fsc_amount, line.line_total]
       );
     }
     
@@ -3491,11 +3493,12 @@ app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('ca
     doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
     doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
     doc.text('Date', 55, yPos + 6);
-    doc.text('Route', 110, yPos + 6);
-    doc.text('Day Type', 160, yPos + 6);
+    doc.text('Route', 105, yPos + 6);
+    doc.text('Vehicle', 145, yPos + 6);
+    doc.text('Day', 190, yPos + 6);
     doc.text('Details', 230, yPos + 6);
-    doc.text('Base Cost', 420, yPos + 6, { width: 60, align: 'right' });
-    doc.text('Total', 480, yPos + 6, { width: 60, align: 'right' });
+    doc.text('Base Cost', 410, yPos + 6, { width: 60, align: 'right' });
+    doc.text('Total', 470, yPos + 6, { width: 70, align: 'right' });
     
     yPos += 20;
     
@@ -3513,11 +3516,12 @@ app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('ca
         doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
         doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
         doc.text('Date', 55, yPos + 6);
-        doc.text('Route', 110, yPos + 6);
-        doc.text('Day Type', 160, yPos + 6);
+        doc.text('Route', 105, yPos + 6);
+        doc.text('Vehicle', 145, yPos + 6);
+        doc.text('Day', 190, yPos + 6);
         doc.text('Details', 230, yPos + 6);
-        doc.text('Base Cost', 420, yPos + 6, { width: 60, align: 'right' });
-        doc.text('Total', 480, yPos + 6, { width: 60, align: 'right' });
+        doc.text('Base Cost', 410, yPos + 6, { width: 60, align: 'right' });
+        doc.text('Total', 470, yPos + 6, { width: 70, align: 'right' });
         yPos += 20;
       }
       
@@ -3532,11 +3536,14 @@ app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('ca
       doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 5);
       
       // Route
-      doc.font('Helvetica-Bold').text(line.route_ref || '-', 110, yPos + 5);
+      doc.font('Helvetica-Bold').text(line.route_ref || '-', 105, yPos + 5);
       doc.font('Helvetica');
       
+      // Vehicle Type
+      doc.text(line.vehicle_type || 'ARTIC', 145, yPos + 5);
+      
       // Day Type
-      doc.text(dayTypeLabels[line.day_type] || line.day_type, 160, yPos + 5);
+      doc.text(dayTypeLabels[line.day_type] || line.day_type, 190, yPos + 5);
       
       // Route Legs Details
       let legYPos = yPos + 5;
@@ -3576,8 +3583,8 @@ app.get('/api/purchase-orders/:id/pdf', authenticateToken, requirePermission('ca
       
       // Costs
       doc.fontSize(8).fillColor(darkGray);
-      doc.text(`£${parseFloat(line.base_cost).toFixed(2)}`, 420, yPos + 5, { width: 60, align: 'right' });
-      doc.font('Helvetica-Bold').text(`£${parseFloat(line.line_total).toFixed(2)}`, 480, yPos + 5, { width: 60, align: 'right' });
+      doc.text(`£${parseFloat(line.base_cost).toFixed(2)}`, 410, yPos + 5, { width: 60, align: 'right' });
+      doc.font('Helvetica-Bold').text(`£${parseFloat(line.line_total).toFixed(2)}`, 470, yPos + 5, { width: 70, align: 'right' });
       
       yPos += Math.max(50, legYPos - yPos + 10);
       rowIndex++;
@@ -3690,6 +3697,7 @@ function generatePOEmailHTML(po, lines, settings) {
       <tr style="border-bottom: 1px solid #e2e8f0;">
         <td style="padding: 12px 8px; font-size: 12px;">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
         <td style="padding: 12px 8px; font-family: monospace; font-weight: 600;">${line.route_ref || '-'}</td>
+        <td style="padding: 12px 8px; font-size: 11px;">${line.vehicle_type || 'ARTIC'}</td>
         <td style="padding: 12px 8px; font-size: 11px;">${dayTypeLabels[line.day_type] || line.day_type}</td>
         <td style="padding: 12px 8px;">${legsHTML || '-'}</td>
         <td style="padding: 12px 8px; text-align: right; font-weight: 600;">£${parseFloat(line.line_total).toFixed(2)}</td>
@@ -3782,6 +3790,7 @@ function generatePOEmailHTML(po, lines, settings) {
                   <tr style="background-color: #0066B3;">
                     <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Date</th>
                     <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Route</th>
+                    <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Vehicle</th>
                     <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Day</th>
                     <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px; font-weight: 600;">Details</th>
                     <th style="padding: 12px 8px; text-align: right; color: #ffffff; font-size: 11px; font-weight: 600;">Total</th>
@@ -3966,9 +3975,10 @@ async function generatePOPdfBuffer(po, lines, settings) {
       doc.rect(50, yPos, 495, 20).fillColor(dxBlue).fill();
       doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
       doc.text('Date', 55, yPos + 6);
-      doc.text('Route', 110, yPos + 6);
-      doc.text('Day Type', 170, yPos + 6);
-      doc.text('Details', 240, yPos + 6);
+      doc.text('Route', 105, yPos + 6);
+      doc.text('Vehicle', 145, yPos + 6);
+      doc.text('Day', 185, yPos + 6);
+      doc.text('Details', 225, yPos + 6);
       doc.text('Total', 490, yPos + 6, { width: 50, align: 'right' });
       yPos += 20;
       
@@ -3982,14 +3992,15 @@ async function generatePOPdfBuffer(po, lines, settings) {
         
         doc.fillColor(darkGray).fontSize(8).font('Helvetica');
         doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 5);
-        doc.font('Helvetica-Bold').text(line.route_ref || '-', 110, yPos + 5);
-        doc.font('Helvetica').text(dayTypeLabels[line.day_type] || line.day_type, 170, yPos + 5);
+        doc.font('Helvetica-Bold').text(line.route_ref || '-', 105, yPos + 5);
+        doc.font('Helvetica').text(line.vehicle_type || 'ARTIC', 145, yPos + 5);
+        doc.text(dayTypeLabels[line.day_type] || line.day_type, 185, yPos + 5);
         
         // Legs
         let legY = yPos + 5;
         if (line.route_legs && Array.isArray(line.route_legs)) {
           for (const leg of line.route_legs) {
-            doc.fontSize(7).text(`${leg.scheduled_dep || ''} ${leg.origin || ''} → ${leg.scheduled_arr || ''} ${leg.destination || ''}`, 240, legY, { width: 180 });
+            doc.fontSize(7).text(`${leg.scheduled_dep || ''} ${leg.origin || ''} → ${leg.scheduled_arr || ''} ${leg.destination || ''}`, 225, legY, { width: 180 });
             legY += 10;
           }
         }

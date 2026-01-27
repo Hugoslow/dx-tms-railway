@@ -572,9 +572,15 @@ function calculateCascadingETAs(movements) {
         previousDestination = leg.destination;
       }
       
-      // Calculate delay
+      // Calculate delay - normalize for overnight routes
       if (scheduledArrMins !== null && realisticArrMins !== null) {
-        arrivalDelayMins = realisticArrMins - scheduledArrMins;
+        // Normalize realistic arrival to 0-1440 range for delay calculation
+        const normalizedRealisticArr = realisticArrMins % 1440;
+        arrivalDelayMins = normalizedRealisticArr - scheduledArrMins;
+        
+        // Handle overnight wrap-around (if delay seems absurdly large or negative)
+        if (arrivalDelayMins > 720) arrivalDelayMins -= 1440;  // Crossed midnight backwards
+        if (arrivalDelayMins < -720) arrivalDelayMins += 1440; // Crossed midnight forwards
       }
       
       // Update the movement in the map
@@ -827,7 +833,12 @@ app.get('/api/movements/route/:routeRef', authenticateToken, async (req, res) =>
       }
       
       // Calculate delay for display (positive = late, negative = early)
-      const arrivalDelayMins = realisticArrMins - scheduledArrMins;
+      // Normalize for overnight routes
+      const normalizedRealisticArr = realisticArrMins % 1440;
+      let arrivalDelayMins = normalizedRealisticArr - scheduledArrMins;
+      // Handle overnight wrap-around
+      if (arrivalDelayMins > 720) arrivalDelayMins -= 1440;
+      if (arrivalDelayMins < -720) arrivalDelayMins += 1440;
       
       return {
         ...leg,

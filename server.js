@@ -4962,36 +4962,131 @@ app.get('/api/reports/weekly-export', authenticateToken, requirePermission('canP
     workbook.creator = 'DX TMS';
     workbook.created = new Date();
     
-    // By Contractor sheet
+    // ========== SUMMARY SHEET ==========
+    const summarySheet = workbook.addWorksheet('Summary');
+    summarySheet.columns = [
+      { header: 'Description', key: 'description', width: 30 },
+      { header: 'Count', key: 'count', width: 12 },
+      { header: 'Subtotal', key: 'subtotal', width: 15 },
+      { header: 'FSC', key: 'fsc', width: 15 },
+      { header: 'VAT', key: 'vat', width: 15 },
+      { header: 'Total', key: 'total', width: 18 }
+    ];
+    
+    // Get PO totals
+    const poTotalsResult = await pool.query(
+      `SELECT COUNT(*) as count,
+       COALESCE(SUM(subtotal), 0) as subtotal,
+       COALESCE(SUM(fsc_total), 0) as fsc,
+       COALESCE(SUM(vat_amount), 0) as vat,
+       COALESCE(SUM(grand_total), 0) as total
+       FROM purchase_orders
+       WHERE week_commencing >= $1 AND week_commencing <= $2
+       AND status IN ('authorised', 'sent')`,
+      [from_date, to_date]
+    );
+    const poTotals = poTotalsResult.rows[0];
+    
+    // Get Credit Note totals
+    const cnTotalsResult = await pool.query(
+      `SELECT COUNT(*) as count,
+       COALESCE(SUM(cn.subtotal), 0) as subtotal,
+       COALESCE(SUM(cn.fsc_total), 0) as fsc,
+       COALESCE(SUM(cn.vat_amount), 0) as vat,
+       COALESCE(SUM(cn.grand_total), 0) as total
+       FROM credit_notes cn
+       JOIN purchase_orders po ON cn.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND cn.status IN ('authorised', 'sent')`,
+      [from_date, to_date]
+    );
+    const cnTotals = cnTotalsResult.rows[0];
+    
+    // Add summary rows
+    summarySheet.addRow({
+      description: 'Purchase Orders',
+      count: parseInt(poTotals.count),
+      subtotal: parseFloat(poTotals.subtotal),
+      fsc: parseFloat(poTotals.fsc),
+      vat: parseFloat(poTotals.vat),
+      total: parseFloat(poTotals.total)
+    });
+    
+    summarySheet.addRow({
+      description: 'Credit Notes',
+      count: parseInt(cnTotals.count),
+      subtotal: -parseFloat(cnTotals.subtotal),
+      fsc: -parseFloat(cnTotals.fsc),
+      vat: -parseFloat(cnTotals.vat),
+      total: -parseFloat(cnTotals.total)
+    });
+    
+    summarySheet.addRow({}); // Empty row
+    
+    summarySheet.addRow({
+      description: 'NET TOTAL',
+      count: parseInt(poTotals.count) + parseInt(cnTotals.count),
+      subtotal: parseFloat(poTotals.subtotal) - parseFloat(cnTotals.subtotal),
+      fsc: parseFloat(poTotals.fsc) - parseFloat(cnTotals.fsc),
+      vat: parseFloat(poTotals.vat) - parseFloat(cnTotals.vat),
+      total: parseFloat(poTotals.total) - parseFloat(cnTotals.total)
+    });
+    
+    // Style summary
+    summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summarySheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
+    summarySheet.getRow(3).font = { color: { argb: 'FFDC2626' } }; // Credit notes in red
+    summarySheet.getRow(5).font = { bold: true };
+    summarySheet.getRow(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    summarySheet.getRow(5).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // Format currency columns
+    ['C', 'D', 'E', 'F'].forEach(col => {
+      summarySheet.getColumn(col).numFmt = '£#,##0.00';
+    });
+    
+    // ========== BY CONTRACTOR SHEET ==========
     const contractorSheet = workbook.addWorksheet('By Contractor');
     contractorSheet.columns = [
       { header: 'Contractor Code', key: 'contractor_code', width: 15 },
       { header: 'Contractor Name', key: 'contractor_name', width: 30 },
       { header: 'PO Count', key: 'po_count', width: 12 },
-      { header: 'Base Cost', key: 'total_base_cost', width: 15 },
-      { header: 'FSC', key: 'total_fsc', width: 15 },
-      { header: 'VAT', key: 'total_vat', width: 15 },
-      { header: 'Total', key: 'total_cost', width: 15 }
+      { header: 'PO Total', key: 'po_total', width: 15 },
+      { header: 'CN Count', key: 'cn_count', width: 12 },
+      { header: 'CN Total', key: 'cn_total', width: 15 },
+      { header: 'Net Total', key: 'net_total', width: 15 }
     ];
     
     const contractorResult = await pool.query(
       `SELECT c.code as contractor_code, c.name as contractor_name,
        COUNT(DISTINCT po.id) as po_count,
-       SUM(po.subtotal) as total_base_cost,
-       SUM(po.fsc_total) as total_fsc,
-       SUM(po.vat_amount) as total_vat,
-       SUM(po.grand_total) as total_cost
-       FROM purchase_orders po
-       JOIN contractors c ON po.contractor_id = c.id
-       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
-       AND po.status IN ('authorised', 'sent')
+       COALESCE(SUM(po.grand_total), 0) as po_total,
+       COUNT(DISTINCT cn.id) as cn_count,
+       COALESCE(SUM(cn.grand_total), 0) as cn_total
+       FROM contractors c
+       LEFT JOIN purchase_orders po ON po.contractor_id = c.id 
+         AND po.week_commencing >= $1 AND po.week_commencing <= $2
+         AND po.status IN ('authorised', 'sent')
+       LEFT JOIN credit_notes cn ON cn.contractor_id = c.id 
+         AND cn.status IN ('authorised', 'sent')
+         AND EXISTS (SELECT 1 FROM purchase_orders po2 WHERE po2.id = cn.po_id 
+                     AND po2.week_commencing >= $1 AND po2.week_commencing <= $2)
+       WHERE po.id IS NOT NULL OR cn.id IS NOT NULL
        GROUP BY c.id, c.code, c.name
-       ORDER BY total_cost DESC`,
+       ORDER BY (COALESCE(SUM(po.grand_total), 0) - COALESCE(SUM(cn.grand_total), 0)) DESC`,
       [from_date, to_date]
     );
     
     contractorResult.rows.forEach(row => {
-      contractorSheet.addRow(row);
+      contractorSheet.addRow({
+        contractor_code: row.contractor_code,
+        contractor_name: row.contractor_name,
+        po_count: parseInt(row.po_count),
+        po_total: parseFloat(row.po_total),
+        cn_count: parseInt(row.cn_count),
+        cn_total: -parseFloat(row.cn_total),
+        net_total: parseFloat(row.po_total) - parseFloat(row.cn_total)
+      });
     });
     
     // Style header row
@@ -4999,7 +5094,12 @@ app.get('/api/reports/weekly-export', authenticateToken, requirePermission('canP
     contractorSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
     contractorSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     
-    // By Route sheet
+    // Format currency columns
+    ['D', 'F', 'G'].forEach(col => {
+      contractorSheet.getColumn(col).numFmt = '£#,##0.00';
+    });
+    
+    // ========== BY ROUTE SHEET ==========
     const routeSheet = workbook.addWorksheet('By Route');
     routeSheet.columns = [
       { header: 'Route Ref', key: 'route_ref', width: 15 },
@@ -5031,6 +5131,110 @@ app.get('/api/reports/weekly-export', authenticateToken, requirePermission('canP
     routeSheet.getRow(1).font = { bold: true };
     routeSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
     routeSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // Format currency columns
+    ['C', 'D', 'E'].forEach(col => {
+      routeSheet.getColumn(col).numFmt = '£#,##0.00';
+    });
+    
+    // ========== CREDIT NOTES SHEET ==========
+    const creditSheet = workbook.addWorksheet('Credit Notes');
+    creditSheet.columns = [
+      { header: 'Credit Note', key: 'credit_number', width: 18 },
+      { header: 'Against PO', key: 'po_number', width: 18 },
+      { header: 'Contractor', key: 'contractor_name', width: 25 },
+      { header: 'Reason', key: 'reason', width: 35 },
+      { header: 'Subtotal', key: 'subtotal', width: 12 },
+      { header: 'FSC', key: 'fsc', width: 12 },
+      { header: 'VAT', key: 'vat', width: 12 },
+      { header: 'Total', key: 'total', width: 15 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Date', key: 'date', width: 12 }
+    ];
+    
+    const creditResult = await pool.query(
+      `SELECT cn.credit_number, po.po_number, c.name as contractor_name,
+       cn.reason, cn.subtotal, cn.fsc_total as fsc, cn.vat_amount as vat, 
+       cn.grand_total as total, cn.status, cn.created_at as date
+       FROM credit_notes cn
+       JOIN purchase_orders po ON cn.po_id = po.id
+       JOIN contractors c ON cn.contractor_id = c.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND cn.status IN ('authorised', 'sent')
+       ORDER BY cn.created_at DESC`,
+      [from_date, to_date]
+    );
+    
+    creditResult.rows.forEach(row => {
+      creditSheet.addRow({
+        credit_number: row.credit_number,
+        po_number: row.po_number,
+        contractor_name: row.contractor_name,
+        reason: row.reason,
+        subtotal: -parseFloat(row.subtotal),
+        fsc: -parseFloat(row.fsc),
+        vat: -parseFloat(row.vat),
+        total: -parseFloat(row.total),
+        status: row.status,
+        date: new Date(row.date).toLocaleDateString('en-GB')
+      });
+    });
+    
+    creditSheet.getRow(1).font = { bold: true };
+    creditSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } };
+    creditSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // Format currency columns
+    ['E', 'F', 'G', 'H'].forEach(col => {
+      creditSheet.getColumn(col).numFmt = '£#,##0.00';
+    });
+    
+    // ========== PURCHASE ORDERS DETAIL SHEET ==========
+    const poSheet = workbook.addWorksheet('Purchase Orders');
+    poSheet.columns = [
+      { header: 'PO Number', key: 'po_number', width: 18 },
+      { header: 'Contractor', key: 'contractor_name', width: 25 },
+      { header: 'Week Commencing', key: 'week_commencing', width: 15 },
+      { header: 'Subtotal', key: 'subtotal', width: 12 },
+      { header: 'FSC', key: 'fsc', width: 12 },
+      { header: 'VAT', key: 'vat', width: 12 },
+      { header: 'Total', key: 'total', width: 15 },
+      { header: 'Status', key: 'status', width: 12 }
+    ];
+    
+    const poDetailResult = await pool.query(
+      `SELECT po.po_number, c.name as contractor_name, po.week_commencing,
+       po.subtotal, po.fsc_total as fsc, po.vat_amount as vat,
+       po.grand_total as total, po.status
+       FROM purchase_orders po
+       JOIN contractors c ON po.contractor_id = c.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       ORDER BY po.week_commencing, c.name`,
+      [from_date, to_date]
+    );
+    
+    poDetailResult.rows.forEach(row => {
+      poSheet.addRow({
+        po_number: row.po_number,
+        contractor_name: row.contractor_name,
+        week_commencing: new Date(row.week_commencing).toLocaleDateString('en-GB'),
+        subtotal: parseFloat(row.subtotal),
+        fsc: parseFloat(row.fsc),
+        vat: parseFloat(row.vat),
+        total: parseFloat(row.total),
+        status: row.status
+      });
+    });
+    
+    poSheet.getRow(1).font = { bold: true };
+    poSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0066B3' } };
+    poSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    
+    // Format currency columns
+    ['D', 'E', 'F', 'G'].forEach(col => {
+      poSheet.getColumn(col).numFmt = '£#,##0.00';
+    });
     
     // Send file
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -448,12 +448,148 @@ app.get('/api/movements', authenticateToken, async (req, res) => {
          scheduled_dep ASC`,
       [requestedDate]
     );
-    res.json(result.rows);
+    
+    // Calculate cascading Live ETAs for multi-leg routes
+    const movements = result.rows;
+    const enrichedMovements = calculateCascadingETAs(movements);
+    
+    res.json(enrichedMovements);
   } catch (err) {
     console.error('Get movements error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// Helper function to calculate cascading ETAs across all route legs
+function calculateCascadingETAs(movements) {
+  const MINIMUM_TURNAROUND_MINUTES = 15;
+  
+  // Helper to parse time string to minutes since midnight
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return null;
+    const hours = parseInt(parts[0], 10);
+    const mins = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(mins)) return null;
+    return hours * 60 + mins;
+  };
+  
+  // Helper to convert minutes back to time string
+  const minutesToTime = (mins) => {
+    if (mins === null || mins === undefined) return null;
+    const hours = Math.floor(mins / 60) % 24;
+    const minutes = mins % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+  
+  // Group movements by route_ref
+  const routeGroups = {};
+  movements.forEach(m => {
+    if (m.route_ref && m.route_ref.trim() !== '') {
+      if (!routeGroups[m.route_ref]) {
+        routeGroups[m.route_ref] = [];
+      }
+      routeGroups[m.route_ref].push(m);
+    }
+  });
+  
+  // Create a map for quick lookup by ID
+  const movementMap = {};
+  movements.forEach(m => {
+    movementMap[m.id] = m;
+  });
+  
+  // Process each route with multiple legs
+  for (const routeRef of Object.keys(routeGroups)) {
+    const legs = routeGroups[routeRef];
+    if (legs.length < 2) continue; // Single leg routes don't need cascading
+    
+    // Sort legs by scheduled departure
+    legs.sort((a, b) => {
+      const aTime = timeToMinutes(a.scheduled_dep) || 0;
+      const bTime = timeToMinutes(b.scheduled_dep) || 0;
+      return aTime - bTime;
+    });
+    
+    let previousRealisticArrival = null;
+    let previousDestination = null;
+    
+    legs.forEach((leg, index) => {
+      const scheduledDepMins = timeToMinutes(leg.scheduled_dep);
+      const scheduledArrMins = timeToMinutes(leg.scheduled_arr);
+      const actualDepMins = timeToMinutes(leg.actual_dep);
+      const actualArrMins = timeToMinutes(leg.gate_arrival);
+      
+      // Calculate journey duration from scheduled times
+      let journeyDuration = 45; // Default
+      if (scheduledDepMins !== null && scheduledArrMins !== null) {
+        journeyDuration = scheduledArrMins - scheduledDepMins;
+        if (journeyDuration < 0) journeyDuration += 1440; // Handle overnight
+      }
+      
+      let realisticArrMins = scheduledArrMins;
+      let arrivalDelayMins = 0;
+      
+      // If this leg has actually departed, use real data
+      if (actualDepMins !== null) {
+        // If already arrived, use actual arrival
+        if (actualArrMins !== null) {
+          realisticArrMins = actualArrMins;
+        } else {
+          // Estimate arrival based on actual departure + journey duration
+          realisticArrMins = actualDepMins + journeyDuration;
+        }
+        
+        previousRealisticArrival = realisticArrMins;
+        previousDestination = leg.destination;
+      } 
+      // If not departed, calculate based on cascading delay from previous legs
+      else if (index > 0 && previousRealisticArrival !== null) {
+        // Check if this leg departs from where the previous leg arrived
+        const legOriginMatchesPrevDest = leg.origin === previousDestination;
+        
+        if (legOriginMatchesPrevDest && scheduledDepMins !== null) {
+          // Calculate if delay cascades
+          const prevLeg = legs[index - 1];
+          const prevScheduledArr = timeToMinutes(prevLeg.scheduled_arr) || 0;
+          
+          // The earliest this leg can depart is previous arrival + minimum turnaround
+          const earliestDeparture = previousRealisticArrival + MINIMUM_TURNAROUND_MINUTES;
+          
+          // If the cascading delay eats into the turnaround buffer
+          if (earliestDeparture > scheduledDepMins) {
+            const realisticDepMins = earliestDeparture;
+            realisticArrMins = realisticDepMins + journeyDuration;
+          }
+        }
+        
+        previousRealisticArrival = realisticArrMins;
+        previousDestination = leg.destination;
+      } else {
+        previousRealisticArrival = realisticArrMins;
+        previousDestination = leg.destination;
+      }
+      
+      // Calculate delay
+      if (scheduledArrMins !== null && realisticArrMins !== null) {
+        arrivalDelayMins = realisticArrMins - scheduledArrMins;
+      }
+      
+      // Update the movement in the map
+      const movement = movementMap[leg.id];
+      if (movement) {
+        movement.live_eta = minutesToTime(realisticArrMins);
+        movement.arrival_delay_mins = arrivalDelayMins;
+        movement.eta_changed = Math.abs(arrivalDelayMins) >= 1;
+        movement.is_multi_leg_route = true;
+      }
+    });
+  }
+  
+  // Return all movements with enriched data
+  return movements.map(m => movementMap[m.id] || m);
+}
 
 // Helper function to generate movements for a future date
 async function generateMovementsForDate(targetDate) {
@@ -593,11 +729,127 @@ app.get('/api/movements/route/:routeRef', authenticateToken, async (req, res) =>
       [routeRef, targetDate]
     );
     
+    // Calculate cascading realistic ETAs
+    const legs = result.rows;
+    const MINIMUM_TURNAROUND_MINUTES = 15; // Minimum time needed at each stop
+    
+    // Helper to parse time string to minutes since midnight
+    const timeToMinutes = (timeStr) => {
+      if (!timeStr) return null;
+      const [hours, mins] = timeStr.split(':').map(Number);
+      return hours * 60 + mins;
+    };
+    
+    // Helper to convert minutes back to time string
+    const minutesToTime = (mins) => {
+      if (mins === null) return null;
+      const hours = Math.floor(mins / 60) % 24;
+      const minutes = mins % 60;
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    };
+    
+    // Calculate journey duration from scheduled times
+    const getJourneyDuration = (leg) => {
+      const depMins = timeToMinutes(leg.scheduled_dep);
+      const arrMins = timeToMinutes(leg.scheduled_arr);
+      if (depMins === null || arrMins === null) return 45; // Default 45 mins
+      let duration = arrMins - depMins;
+      if (duration < 0) duration += 1440; // Handle overnight
+      return duration;
+    };
+    
+    let cascadingDelay = 0; // Accumulated delay in minutes
+    let previousRealisticArrival = null;
+    let previousDestination = null;
+    
+    const enrichedLegs = legs.map((leg, index) => {
+      const scheduledDepMins = timeToMinutes(leg.scheduled_dep);
+      const scheduledArrMins = timeToMinutes(leg.scheduled_arr);
+      const actualDepMins = timeToMinutes(leg.actual_dep);
+      const actualArrMins = timeToMinutes(leg.gate_arrival);
+      const journeyDuration = getJourneyDuration(leg);
+      
+      let realisticDepMins = scheduledDepMins;
+      let realisticArrMins = scheduledArrMins;
+      let legDelay = 0;
+      
+      // If this leg has actually departed, use real data
+      if (actualDepMins !== null) {
+        legDelay = actualDepMins - scheduledDepMins;
+        if (legDelay < -720) legDelay += 1440; // Handle overnight wrap
+        if (legDelay > 720) legDelay -= 1440;
+        
+        realisticDepMins = actualDepMins;
+        
+        // If already arrived, use actual arrival
+        if (actualArrMins !== null) {
+          realisticArrMins = actualArrMins;
+        } else {
+          // Estimate arrival based on actual departure + journey duration
+          realisticArrMins = actualDepMins + journeyDuration;
+        }
+        
+        cascadingDelay = legDelay;
+        previousRealisticArrival = realisticArrMins;
+        previousDestination = leg.destination;
+      } 
+      // If not departed, calculate based on cascading delay from previous legs
+      else if (index > 0 && previousRealisticArrival !== null) {
+        // Check if this leg departs from where the previous leg arrived
+        const legOriginMatchesPrevDest = leg.origin === previousDestination;
+        
+        if (legOriginMatchesPrevDest) {
+          // Calculate turnaround time built into the schedule
+          const scheduledTurnaround = scheduledDepMins - (timeToMinutes(legs[index - 1].scheduled_arr) || scheduledDepMins);
+          
+          // The earliest this leg can depart is previous arrival + minimum turnaround
+          const earliestDeparture = previousRealisticArrival + MINIMUM_TURNAROUND_MINUTES;
+          
+          // If the cascading delay eats into the turnaround buffer, this leg is also delayed
+          if (earliestDeparture > scheduledDepMins) {
+            realisticDepMins = earliestDeparture;
+            legDelay = realisticDepMins - scheduledDepMins;
+          } else {
+            // Turnaround absorbs the delay - back on schedule
+            realisticDepMins = scheduledDepMins;
+            legDelay = 0;
+          }
+        } else {
+          // Different vehicle/driver - just apply any known delay pattern
+          realisticDepMins = scheduledDepMins + cascadingDelay;
+          legDelay = cascadingDelay;
+        }
+        
+        realisticArrMins = realisticDepMins + journeyDuration;
+        previousRealisticArrival = realisticArrMins;
+        previousDestination = leg.destination;
+      }
+      
+      // Calculate delay for display (positive = late, negative = early)
+      const arrivalDelayMins = realisticArrMins - scheduledArrMins;
+      
+      return {
+        ...leg,
+        // Original scheduled times (for performance measurement)
+        scheduled_dep: leg.scheduled_dep,
+        scheduled_arr: leg.scheduled_arr,
+        // Realistic/Live times (what's actually expected)
+        realistic_dep: minutesToTime(realisticDepMins),
+        realistic_arr: minutesToTime(realisticArrMins),
+        // Delay information
+        departure_delay_mins: legDelay,
+        arrival_delay_mins: arrivalDelayMins,
+        // Is the realistic different from scheduled?
+        eta_changed: Math.abs(arrivalDelayMins) >= 1
+      };
+    });
+    
     res.json({
       routeRef: routeRef,
       date: targetDate,
-      legCount: result.rows.length,
-      legs: result.rows
+      legCount: enrichedLegs.length,
+      legs: enrichedLegs,
+      cascadingDelayEnabled: true
     });
   } catch (err) {
     console.error('Route reference search error:', err);

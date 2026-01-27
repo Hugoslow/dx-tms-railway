@@ -1204,23 +1204,26 @@ app.post('/api/movements', authenticateToken, requirePermission('canManageTrunks
   try {
     const {
       trunk_id, route_ref, contractor, vehicle_type, origin, destination,
-      scheduled_dep, scheduled_arr, direction, status = 'scheduled'
+      scheduled_dep, scheduled_arr, direction, status = 'scheduled', movement_date
     } = req.body;
+    
+    // Use provided date or default to current operational day
+    const targetDate = movement_date || getOperationalDay(new Date());
     
     const result = await pool.query(
       `INSERT INTO trunk_movements 
        (trunk_id, route_ref, contractor, vehicle_type, origin, destination, 
         scheduled_dep, scheduled_arr, direction, status, movement_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [trunk_id, route_ref, contractor, vehicle_type, origin, destination,
-       scheduled_dep, scheduled_arr, direction, status]
+       scheduled_dep, scheduled_arr, direction, status, targetDate]
     );
     
     // Log the action
     await pool.query(
       'INSERT INTO audit_log (user_name, action, details, trunk_id) VALUES ($1, $2, $3, $4)',
-      [req.user.fullName, 'Trunk added', `${trunk_id}: ${origin} → ${destination}`, trunk_id]
+      [req.user.fullName, 'Trunk added', `${trunk_id}: ${origin} → ${destination} (${targetDate})`, trunk_id]
     );
     
     res.status(201).json(result.rows[0]);

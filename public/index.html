@@ -2736,6 +2736,9 @@
             const depotFilter = document.getElementById('depotOriginFilter')?.value || '';
             let scheduled = movements.filter(t => ['scheduled', 'loading'].includes(t.status));
             
+            // Preserve current trunk selection
+            const currentSelection = document.getElementById('depTrunkSelect')?.value || '';
+            
             // Filter by origin depot if selected
             if (depotFilter) {
                 scheduled = scheduled.filter(t => t.origin === depotFilter);
@@ -2751,12 +2754,19 @@
             // Only populate trunk dropdown if depot is selected
             if (depotFilter) {
                 document.getElementById('depTrunkSelect').innerHTML = '<option value="">-- Select Trunk --</option>' + scheduled.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) → ${t.destination}</option>`).join('');
+                // Restore selection if still valid
+                if (currentSelection && scheduled.some(t => t.id == currentSelection)) {
+                    document.getElementById('depTrunkSelect').value = currentSelection;
+                }
             } else {
                 document.getElementById('depTrunkSelect').innerHTML = '<option value="">-- Select Depot First --</option>';
             }
             
             document.getElementById('pendingDeparturesBody').innerHTML = scheduled.slice(0, 100).map(t => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2">${t.contractor || ''}</td><td class="px-3 py-2">${t.origin} → ${t.destination}</td><td class="px-3 py-2 font-mono">${t.scheduled_dep || ''}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td></tr>`).join('');
-            document.getElementById('depTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            // Only set default time if field is empty
+            if (!document.getElementById('depTime').value) {
+                document.getElementById('depTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            }
         }
 
         function renderHubArrival() {
@@ -2764,6 +2774,9 @@
             let inTransit = movements.filter(t => ['departed', 'in-transit'].includes(t.status));
             if (hubFilter) inTransit = inTransit.filter(t => t.destination === hubFilter);
             inTransit = sortByOperationalArrivalTime(inTransit);
+            
+            // Preserve current trunk selection
+            const currentSelection = document.getElementById('arrTrunkSelect')?.value || '';
             
             // Helper to get delay colour class
             const getDelayClass = (delayMins) => {
@@ -2783,6 +2796,12 @@
             
             document.getElementById('expectedArrCount').textContent = `(${inTransit.length})`;
             document.getElementById('arrTrunkSelect').innerHTML = '<option value="">-- Select --</option>' + inTransit.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) ${t.origin}→${t.destination}</option>`).join('');
+            
+            // Restore selection if still valid
+            if (currentSelection && inTransit.some(t => t.id == currentSelection)) {
+                document.getElementById('arrTrunkSelect').value = currentSelection;
+            }
+            
             document.getElementById('expectedArrivalsBody').innerHTML = inTransit.map(t => {
                 const liveEta = t.live_eta || t.scheduled_arr || '';
                 const etaChanged = t.eta_changed;
@@ -2792,7 +2811,10 @@
                 
                 return `<tr class="border-b border-slate-100 ${etaChanged ? 'bg-amber-50/30' : ''}"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2 font-medium">${t.destination}</td><td class="px-3 py-2 font-mono">${t.actual_dep || '—'}</td><td class="px-3 py-2 font-mono ${schedEtaClass}">${t.scheduled_arr || ''}</td><td class="px-3 py-2 font-mono bg-indigo-50/30 ${delayClass}">${liveEta}${delayBadge}</td></tr>`;
             }).join('');
-            document.getElementById('arrGateTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            // Only set default time if field is empty
+            if (!document.getElementById('arrGateTime').value) {
+                document.getElementById('arrGateTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            }
         }
 
         function renderHubOperations() {
@@ -2800,7 +2822,16 @@
             let docked = movements.filter(t => ['arrived', 'docked', 'tipping'].includes(t.status));
             if (hubFilter) docked = docked.filter(t => t.destination === hubFilter);
             
+            // Preserve current trunk selection
+            const currentSelection = document.getElementById('opsTrunkSelect')?.value || '';
+            
             document.getElementById('opsTrunkSelect').innerHTML = '<option value="">-- Select --</option>' + docked.map(t => `<option value="${t.id}">${t.trunk_id} (${t.route_ref || ''}) Bay ${t.bay || '?'}</option>`).join('');
+            
+            // Restore selection if still valid
+            if (currentSelection && docked.some(t => t.id == currentSelection)) {
+                document.getElementById('opsTrunkSelect').value = currentSelection;
+            }
+            
             document.getElementById('dockedTrailersBody').innerHTML = docked.map(t => `<tr class="border-b border-slate-100"><td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td><td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td><td class="px-3 py-2 font-bold">${t.bay || '—'}</td><td class="px-3 py-2 font-medium">${t.destination}</td><td class="px-3 py-2">${t.origin}</td><td class="px-3 py-2 font-mono">${t.gate_arrival || '—'}</td><td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded border status-${t.status}">${t.status}</span></td></tr>`).join('');
         }
 

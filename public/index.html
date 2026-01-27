@@ -977,7 +977,8 @@
                         </div>
                         <!-- Costing Sub-tabs -->
                         <div class="flex flex-wrap gap-1">
-                            <button onclick="showCostingTab('contractors')" class="costing-tab-btn active px-3 py-1.5 rounded text-sm font-medium bg-[#0066B3] text-white" data-tab="contractors">Contractors</button>
+                            <button onclick="showCostingTab('dashboard')" class="costing-tab-btn active px-3 py-1.5 rounded text-sm font-medium bg-[#0066B3] text-white" data-tab="dashboard">Dashboard</button>
+                            <button onclick="showCostingTab('contractors')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="contractors">Contractors</button>
                             <button onclick="showCostingTab('locations')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="locations">Locations</button>
                             <button onclick="showCostingTab('route-costs')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="route-costs">Route Costs</button>
                             <button onclick="showCostingTab('bank-holidays')" class="costing-tab-btn px-3 py-1.5 rounded text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200" data-tab="bank-holidays">Bank Holidays</button>
@@ -988,8 +989,147 @@
                         </div>
                     </div>
                     
+                    <!-- Dashboard Tab -->
+                    <div id="costing-tab-dashboard" class="costing-tab-panel p-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-medium text-slate-700">Costing Dashboard</h4>
+                            <button onclick="loadCostingDashboard()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-medium"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Refresh</button>
+                        </div>
+                        
+                        <!-- Summary Cards Row 1 -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white shadow-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-blue-100 text-sm">POs This Week</p>
+                                        <p id="dashPOsThisWeek" class="text-3xl font-bold mt-1">-</p>
+                                    </div>
+                                    <div class="bg-white/20 rounded-lg p-2"><i data-lucide="file-text" class="w-6 h-6"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white shadow-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-emerald-100 text-sm">Total Spend This Week</p>
+                                        <p id="dashSpendThisWeek" class="text-3xl font-bold mt-1">-</p>
+                                    </div>
+                                    <div class="bg-white/20 rounded-lg p-2"><i data-lucide="pound-sterling" class="w-6 h-6"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-4 text-white shadow-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-amber-100 text-sm">Avg Cost Per Movement</p>
+                                        <p id="dashAvgCostPerMovement" class="text-3xl font-bold mt-1">-</p>
+                                    </div>
+                                    <div class="bg-white/20 rounded-lg p-2"><i data-lucide="truck" class="w-6 h-6"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-4 text-white shadow-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-red-100 text-sm">Credit Notes This Week</p>
+                                        <p id="dashCreditsThisWeek" class="text-3xl font-bold mt-1">-</p>
+                                    </div>
+                                    <div class="bg-white/20 rounded-lg p-2"><i data-lucide="minus-circle" class="w-6 h-6"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Trunks Per Day -->
+                        <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6">
+                            <h5 class="font-medium text-slate-700 mb-4">Trunks Per Day (This Week)</h5>
+                            <div class="grid grid-cols-7 gap-2">
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Mon</p>
+                                    <div class="bg-blue-50 rounded-lg p-3">
+                                        <p id="dashTrunksMon" class="text-2xl font-bold text-blue-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostMon" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Tue</p>
+                                    <div class="bg-blue-50 rounded-lg p-3">
+                                        <p id="dashTrunksTue" class="text-2xl font-bold text-blue-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostTue" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Wed</p>
+                                    <div class="bg-blue-50 rounded-lg p-3">
+                                        <p id="dashTrunksWed" class="text-2xl font-bold text-blue-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostWed" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Thu</p>
+                                    <div class="bg-blue-50 rounded-lg p-3">
+                                        <p id="dashTrunksThu" class="text-2xl font-bold text-blue-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostThu" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Fri</p>
+                                    <div class="bg-blue-50 rounded-lg p-3">
+                                        <p id="dashTrunksFri" class="text-2xl font-bold text-blue-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostFri" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Sat</p>
+                                    <div class="bg-amber-50 rounded-lg p-3">
+                                        <p id="dashTrunksSat" class="text-2xl font-bold text-amber-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostSat" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-xs text-slate-500 mb-1">Sun</p>
+                                    <div class="bg-amber-50 rounded-lg p-3">
+                                        <p id="dashTrunksSun" class="text-2xl font-bold text-amber-600">-</p>
+                                        <p class="text-xs text-slate-500 mt-1">trunks</p>
+                                        <p id="dashCostSun" class="text-sm font-medium text-slate-700 mt-1">-</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
+                                <div class="text-sm text-slate-600">
+                                    <span class="font-medium">Week Total:</span> <span id="dashTrunksTotal" class="font-bold text-blue-600">-</span> trunks
+                                </div>
+                                <div class="text-sm text-slate-600">
+                                    <span class="font-medium">Avg Cost/Day:</span> <span id="dashAvgCostPerDay" class="font-bold text-emerald-600">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Top Contractors This Week -->
+                        <div class="bg-white border border-slate-200 rounded-xl p-4">
+                            <h5 class="font-medium text-slate-700 mb-4">Top Contractors This Week</h5>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="border-b border-slate-200">
+                                            <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Contractor</th>
+                                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-600">POs</th>
+                                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-600">Movements</th>
+                                            <th class="px-3 py-2 text-right text-xs font-semibold text-slate-600">Total Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashTopContractors">
+                                        <tr><td colspan="4" class="px-3 py-4 text-center text-slate-500">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Contractors Tab -->
-                    <div id="costing-tab-contractors" class="costing-tab-panel p-4">
+                    <div id="costing-tab-contractors" class="costing-tab-panel p-4 hidden">
                         <div class="flex items-center justify-between mb-4">
                             <h4 class="font-medium text-slate-700">Contractors / Subcontractors</h4>
                             <button onclick="openContractorModal()" class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium"><i data-lucide="plus" class="w-4 h-4"></i>Add Contractor</button>
@@ -2915,7 +3055,7 @@
             
             // Load costing data when switching to costing view
             if (viewName === 'costing' && getPermissions().canViewCosts) {
-                loadContractors();
+                loadCostingDashboard();
             }
             
             lucide.createIcons();
@@ -3429,6 +3569,7 @@
             
             // Load data for the tab
             switch(tabName) {
+                case 'dashboard': loadCostingDashboard(); break;
                 case 'contractors': loadContractors(); break;
                 case 'locations': loadLocations(); break;
                 case 'route-costs': loadRouteCosts(); loadRouteCostFilters(); break;
@@ -3437,6 +3578,57 @@
                 case 'purchase-orders': loadPurchaseOrders(); loadPOFilters(); break;
                 case 'credit-notes': loadCreditNotes(); break;
                 case 'reports': initCostingReportDates(); break;
+            }
+        }
+        
+        // ============ COSTING DASHBOARD ============
+        
+        async function loadCostingDashboard() {
+            try {
+                const data = await api('/costing/dashboard');
+                
+                // Summary cards
+                document.getElementById('dashPOsThisWeek').textContent = data.pos_this_week || 0;
+                document.getElementById('dashSpendThisWeek').textContent = '£' + (parseFloat(data.spend_this_week) || 0).toFixed(2);
+                document.getElementById('dashAvgCostPerMovement').textContent = '£' + (parseFloat(data.avg_cost_per_movement) || 0).toFixed(2);
+                document.getElementById('dashCreditsThisWeek').textContent = data.credits_this_week || 0;
+                
+                // Days of week
+                const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                let totalTrunks = 0;
+                let totalCost = 0;
+                let daysWithData = 0;
+                
+                days.forEach(day => {
+                    const dayData = data.by_day?.[day] || { trunks: 0, cost: 0 };
+                    document.getElementById(`dashTrunks${day}`).textContent = dayData.trunks || 0;
+                    document.getElementById(`dashCost${day}`).textContent = '£' + (parseFloat(dayData.cost) || 0).toFixed(0);
+                    totalTrunks += parseInt(dayData.trunks) || 0;
+                    totalCost += parseFloat(dayData.cost) || 0;
+                    if (dayData.trunks > 0) daysWithData++;
+                });
+                
+                document.getElementById('dashTrunksTotal').textContent = totalTrunks;
+                document.getElementById('dashAvgCostPerDay').textContent = daysWithData > 0 ? '£' + (totalCost / daysWithData).toFixed(2) : '£0.00';
+                
+                // Top contractors
+                const topBody = document.getElementById('dashTopContractors');
+                if (data.top_contractors && data.top_contractors.length > 0) {
+                    topBody.innerHTML = data.top_contractors.map(c => `
+                        <tr class="border-b border-slate-100 hover:bg-slate-50">
+                            <td class="px-3 py-2 font-medium">${c.contractor_name}</td>
+                            <td class="px-3 py-2 text-right">${c.po_count}</td>
+                            <td class="px-3 py-2 text-right">${c.movement_count}</td>
+                            <td class="px-3 py-2 text-right font-medium text-emerald-600">£${parseFloat(c.total_cost).toFixed(2)}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    topBody.innerHTML = '<tr><td colspan="4" class="px-3 py-4 text-center text-slate-500">No data for this week</td></tr>';
+                }
+                
+                lucide.createIcons();
+            } catch (err) {
+                console.error('Load costing dashboard error:', err);
             }
         }
         

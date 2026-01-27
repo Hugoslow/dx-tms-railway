@@ -4263,6 +4263,117 @@ app.post('/api/email/test', authenticateToken, requireRole('admin'), async (req,
   }
 });
 
+// ============ COSTING DASHBOARD ============
+
+app.get('/api/costing/dashboard', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    // Get current week (Monday to Sunday)
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    const weekStart = monday.toISOString().split('T')[0];
+    const weekEnd = sunday.toISOString().split('T')[0];
+    
+    // POs this week
+    const posResult = await pool.query(
+      `SELECT COUNT(*) as count, COALESCE(SUM(grand_total), 0) as total
+       FROM purchase_orders 
+       WHERE week_commencing >= $1 AND week_commencing <= $2
+       AND status IN ('authorised', 'sent')`,
+      [weekStart, weekEnd]
+    );
+    
+    // Credit notes this week
+    const creditsResult = await pool.query(
+      `SELECT COUNT(*) as count, COALESCE(SUM(cn.grand_total), 0) as total
+       FROM credit_notes cn
+       JOIN purchase_orders po ON cn.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND cn.status IN ('authorised', 'sent')`,
+      [weekStart, weekEnd]
+    );
+    
+    // Total movements and average cost
+    const movementsResult = await pool.query(
+      `SELECT COUNT(*) as count, COALESCE(SUM(pol.line_total), 0) as total
+       FROM purchase_order_lines pol
+       JOIN purchase_orders po ON pol.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')`,
+      [weekStart, weekEnd]
+    );
+    
+    const totalMovements = parseInt(movementsResult.rows[0].count) || 0;
+    const totalCost = parseFloat(movementsResult.rows[0].total) || 0;
+    const avgCostPerMovement = totalMovements > 0 ? totalCost / totalMovements : 0;
+    
+    // Trunks by day of week
+    const byDayResult = await pool.query(
+      `SELECT 
+         EXTRACT(DOW FROM pol.movement_date) as day_num,
+         COUNT(*) as trunks,
+         COALESCE(SUM(pol.line_total), 0) as cost
+       FROM purchase_order_lines pol
+       JOIN purchase_orders po ON pol.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY EXTRACT(DOW FROM pol.movement_date)
+       ORDER BY day_num`,
+      [weekStart, weekEnd]
+    );
+    
+    // Convert day numbers to names (0=Sunday, 1=Monday, etc.)
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const byDay = {};
+    byDayResult.rows.forEach(row => {
+      const dayName = dayNames[parseInt(row.day_num)];
+      byDay[dayName] = {
+        trunks: parseInt(row.trunks),
+        cost: parseFloat(row.cost)
+      };
+    });
+    
+    // Top contractors this week
+    const topContractorsResult = await pool.query(
+      `SELECT c.name as contractor_name,
+         COUNT(DISTINCT po.id) as po_count,
+         COUNT(pol.id) as movement_count,
+         COALESCE(SUM(pol.line_total), 0) as total_cost
+       FROM purchase_orders po
+       JOIN contractors c ON po.contractor_id = c.id
+       JOIN purchase_order_lines pol ON pol.po_id = po.id
+       WHERE po.week_commencing >= $1 AND po.week_commencing <= $2
+       AND po.status IN ('authorised', 'sent')
+       GROUP BY c.id, c.name
+       ORDER BY total_cost DESC
+       LIMIT 5`,
+      [weekStart, weekEnd]
+    );
+    
+    res.json({
+      week_start: weekStart,
+      week_end: weekEnd,
+      pos_this_week: parseInt(posResult.rows[0].count) || 0,
+      spend_this_week: parseFloat(posResult.rows[0].total) || 0,
+      credits_this_week: parseInt(creditsResult.rows[0].count) || 0,
+      credits_total: parseFloat(creditsResult.rows[0].total) || 0,
+      total_movements: totalMovements,
+      avg_cost_per_movement: avgCostPerMovement,
+      by_day: byDay,
+      top_contractors: topContractorsResult.rows
+    });
+    
+  } catch (err) {
+    console.error('Costing dashboard error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ CREDIT NOTES ============
 
 // Get all credit notes

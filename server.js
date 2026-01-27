@@ -3,6 +3,7 @@ console.log('=== TMS Server v4.0 Starting ===');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
@@ -10,19 +11,75 @@ const rateLimit = require('express-rate-limit');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
 app.set('trust proxy', 1); // Trust first proxy (Railway)
-app.use(cors());
-app.use(express.json());
+
+// ============ SECURITY MIDDLEWARE ============
+// Helmet sets various HTTP headers for security
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Allow loading external resources
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// CORS configuration - restrict in production
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || true, // Set specific domain in production
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
+
+// Body parser with size limits to prevent DoS
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
 
-// JWT Secret - in production, use a long random string in environment variables
+// Security logging middleware
+app.use((req, res, next) => {
+  // Log security-relevant events
+  if (req.path.includes('/auth/') || req.path.includes('/users')) {
+    console.log(`[SECURITY] ${new Date().toISOString()} ${req.method} ${req.path} IP:${req.ip}`);
+  }
+  next();
+});
+
+// ============ SECURITY CONFIGURATION ============
+// JWT Secret - MUST be set via environment variable in production
 const JWT_SECRET = process.env.JWT_SECRET || 'dx-tms-secret-key-change-in-production-2026';
 const JWT_EXPIRY = '8h';
 const LOCKOUT_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINS = 15;
+
+// Warn if using default secret in production
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.error('⚠️  SECURITY WARNING: JWT_SECRET not set! Using default key is insecure.');
+}
+
+// Validate JWT secret strength
+if (JWT_SECRET.length < 32) {
+  console.warn('⚠️  SECURITY WARNING: JWT_SECRET should be at least 32 characters for security.');
+}
 
 // PostgreSQL connection
 const pool = new Pool({

@@ -1060,9 +1060,31 @@ app.get('/api/schedule', authenticateToken, async (req, res) => {
 app.get('/api/audit', authenticateToken, async (req, res) => {
   try {
     const limit = req.query.limit || 100;
+    const userRole = req.user.role;
+    
+    // Admins and Supervisors see everything
+    if (userRole === 'admin' || userRole === 'supervisor') {
+      const result = await pool.query(
+        'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1',
+        [limit]
+      );
+      return res.json(result.rows);
+    }
+    
+    // Other roles only see operational activities (movements, departures, arrivals)
+    const operationalActions = [
+      'Departed', 'Arrived', 'Updated', 'Status Changed',
+      'Actual Departure', 'Actual Arrival', 'Movement Updated',
+      'Departure Confirmed', 'Arrival Confirmed', 'Hub Arrival',
+      'Schedule Amendment', 'Amendment Created', 'Amendment Approved',
+      'Vehicle Changed', 'Driver Changed', 'ETA Updated'
+    ];
+    
     const result = await pool.query(
-      'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1',
-      [limit]
+      `SELECT * FROM audit_log 
+       WHERE action = ANY($1::text[])
+       ORDER BY created_at DESC LIMIT $2`,
+      [operationalActions, limit]
     );
     res.json(result.rows);
   } catch (err) {
@@ -4747,7 +4769,7 @@ app.post('/api/credit-notes/:id/send-email', authenticateToken, requirePermissio
     
     const cn = cnResult.rows[0];
     
-    if (cn.status !== 'authorised') {
+    if (cn.status === 'draft') {
       return res.status(400).json({ error: 'Credit note must be authorised before sending' });
     }
     

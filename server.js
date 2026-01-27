@@ -4385,6 +4385,517 @@ app.put('/api/credit-notes/:id/authorise', authenticateToken, requirePermission(
   }
 });
 
+// Get single credit note with lines
+app.get('/api/credit-notes/:id', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    const cnResult = await pool.query(
+      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email,
+       c.address_line1 as contractor_address1, c.city as contractor_city, c.postcode as contractor_postcode,
+       po.po_number, po.week_commencing, po.week_ending,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM credit_notes cn
+       LEFT JOIN contractors c ON cn.contractor_id = c.id
+       LEFT JOIN purchase_orders po ON cn.po_id = po.id
+       LEFT JOIN users u1 ON cn.created_by = u1.id
+       LEFT JOIN users u2 ON cn.authorised_by = u2.id
+       WHERE cn.id = $1`,
+      [req.params.id]
+    );
+    
+    if (cnResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Credit note not found' });
+    }
+    
+    const cn = cnResult.rows[0];
+    
+    const linesResult = await pool.query(
+      `SELECT * FROM credit_note_lines WHERE credit_id = $1 ORDER BY movement_date`,
+      [req.params.id]
+    );
+    
+    cn.lines = linesResult.rows;
+    
+    res.json(cn);
+  } catch (err) {
+    console.error('Get credit note error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Generate Credit Note PDF
+app.get('/api/credit-notes/:id/pdf', authenticateToken, requirePermission('canViewCosts'), async (req, res) => {
+  try {
+    // Get credit note details
+    const cnResult = await pool.query(
+      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email, c.code as contractor_code,
+       c.address_line1 as contractor_address1, c.address_line2 as contractor_address2,
+       c.city as contractor_city, c.postcode as contractor_postcode, c.vat_number as contractor_vat,
+       po.po_number, po.week_commencing, po.week_ending,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM credit_notes cn
+       LEFT JOIN contractors c ON cn.contractor_id = c.id
+       LEFT JOIN purchase_orders po ON cn.po_id = po.id
+       LEFT JOIN users u1 ON cn.created_by = u1.id
+       LEFT JOIN users u2 ON cn.authorised_by = u2.id
+       WHERE cn.id = $1`,
+      [req.params.id]
+    );
+    
+    if (cnResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Credit note not found' });
+    }
+    
+    const cn = cnResult.rows[0];
+    
+    // Get lines
+    const linesResult = await pool.query(
+      `SELECT * FROM credit_note_lines WHERE credit_id = $1 ORDER BY movement_date`,
+      [req.params.id]
+    );
+    const lines = linesResult.rows;
+    
+    // Get company settings
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    // Create PDF
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Credit_Note_${cn.credit_number}.pdf"`);
+    
+    doc.pipe(res);
+    
+    const dxRed = '#DC2626';
+    const darkGray = '#1e293b';
+    
+    // Header with logo
+    const logoPath = path.join(__dirname, 'public', 'dx_freight_logo.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 40, { width: 120 });
+    }
+    
+    // Credit Note Title
+    doc.fontSize(24).fillColor(dxRed).font('Helvetica-Bold');
+    doc.text('CREDIT NOTE', 350, 50, { width: 195, align: 'right' });
+    
+    // Credit Note number and status
+    doc.fontSize(12).fillColor(darkGray).font('Helvetica');
+    doc.text(cn.credit_number, 350, 80, { width: 195, align: 'right' });
+    
+    const statusText = cn.status.toUpperCase();
+    const statusColor = cn.status === 'sent' ? '#059669' : cn.status === 'authorised' ? '#d97706' : '#64748b';
+    doc.fontSize(10).fillColor(statusColor).text(statusText, 350, 100, { width: 195, align: 'right' });
+    
+    // From/To boxes
+    let yPos = 130;
+    
+    // From Box
+    doc.rect(50, yPos, 240, 90).fillColor('#fef2f2').fill();
+    doc.fillColor(dxRed).fontSize(9).font('Helvetica-Bold').text('FROM:', 60, yPos + 10);
+    doc.fillColor(darkGray).font('Helvetica-Bold').fontSize(10).text(settings.company_name || 'DX Network Services Ltd', 60, yPos + 25);
+    doc.font('Helvetica').fontSize(9);
+    if (settings.company_address_line1) doc.text(settings.company_address_line1, 60, yPos + 40);
+    if (settings.company_city) doc.text(`${settings.company_city} ${settings.company_postcode || ''}`, 60, yPos + 52);
+    if (settings.vat_number) doc.text(`VAT: ${settings.vat_number}`, 60, yPos + 70);
+    
+    // To Box
+    doc.rect(305, yPos, 240, 90).fillColor('#f8fafc').fill();
+    doc.fillColor(dxRed).fontSize(9).font('Helvetica-Bold').text('TO:', 315, yPos + 10);
+    doc.fillColor(darkGray).font('Helvetica-Bold').fontSize(10).text(cn.contractor_name || '', 315, yPos + 25);
+    doc.font('Helvetica').fontSize(9);
+    if (cn.contractor_address1) doc.text(cn.contractor_address1, 315, yPos + 40);
+    if (cn.contractor_city) doc.text(`${cn.contractor_city} ${cn.contractor_postcode || ''}`, 315, yPos + 52);
+    if (cn.contractor_vat) doc.text(`VAT: ${cn.contractor_vat}`, 315, yPos + 70);
+    
+    // Details box
+    yPos = 235;
+    doc.rect(50, yPos, 495, 50).fillColor('#fef2f2').fill();
+    doc.fillColor(darkGray).fontSize(9);
+    doc.font('Helvetica-Bold').text('Against PO:', 60, yPos + 10);
+    doc.font('Helvetica').text(cn.po_number || '-', 130, yPos + 10);
+    doc.font('Helvetica-Bold').text('Date:', 300, yPos + 10);
+    doc.font('Helvetica').text(new Date(cn.created_at).toLocaleDateString('en-GB'), 340, yPos + 10);
+    doc.font('Helvetica-Bold').text('Reason:', 60, yPos + 30);
+    doc.font('Helvetica').text(cn.reason || '-', 110, yPos + 30, { width: 430 });
+    
+    // Line items header
+    yPos = 300;
+    doc.rect(50, yPos, 495, 20).fillColor(dxRed).fill();
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+    doc.text('Date', 55, yPos + 6);
+    doc.text('Route', 120, yPos + 6);
+    doc.text('Line Reason', 200, yPos + 6);
+    doc.text('Amount', 450, yPos + 6, { width: 90, align: 'right' });
+    yPos += 20;
+    
+    const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Hol' };
+    let rowIndex = 0;
+    
+    for (const line of lines) {
+      if (yPos > 700) {
+        doc.addPage();
+        yPos = 50;
+        
+        // Repeat header
+        doc.rect(50, yPos, 495, 20).fillColor(dxRed).fill();
+        doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+        doc.text('Date', 55, yPos + 6);
+        doc.text('Route', 120, yPos + 6);
+        doc.text('Line Reason', 200, yPos + 6);
+        doc.text('Amount', 450, yPos + 6, { width: 90, align: 'right' });
+        yPos += 20;
+      }
+      
+      if (rowIndex % 2 === 0) {
+        doc.rect(50, yPos, 495, 25).fillColor('#fef2f2').fill();
+      }
+      
+      doc.fillColor(darkGray).fontSize(8).font('Helvetica');
+      doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 8);
+      doc.font('Helvetica-Bold').text(line.route_ref || '-', 120, yPos + 8);
+      doc.font('Helvetica').text(line.reason || '-', 200, yPos + 8, { width: 240 });
+      doc.font('Helvetica-Bold').fillColor(dxRed).text(`-£${parseFloat(line.line_total).toFixed(2)}`, 450, yPos + 8, { width: 90, align: 'right' });
+      
+      yPos += 25;
+      rowIndex++;
+    }
+    
+    // Totals
+    yPos += 20;
+    doc.rect(350, yPos, 195, 100).fillColor('#fef2f2').fill();
+    
+    doc.fillColor(darkGray).fontSize(9).font('Helvetica');
+    doc.text('Subtotal:', 360, yPos + 10);
+    doc.text(`-£${parseFloat(cn.subtotal).toFixed(2)}`, 440, yPos + 10, { width: 100, align: 'right' });
+    
+    doc.text('FSC:', 360, yPos + 28);
+    doc.text(`-£${parseFloat(cn.fsc_total).toFixed(2)}`, 440, yPos + 28, { width: 100, align: 'right' });
+    
+    doc.text('VAT:', 360, yPos + 46);
+    doc.text(`-£${parseFloat(cn.vat_amount).toFixed(2)}`, 440, yPos + 46, { width: 100, align: 'right' });
+    
+    doc.rect(350, yPos + 65, 195, 30).fillColor(dxRed).fill();
+    doc.fillColor('white').fontSize(11).font('Helvetica-Bold');
+    doc.text('CREDIT TOTAL:', 360, yPos + 75);
+    doc.text(`-£${parseFloat(cn.grand_total).toFixed(2)}`, 440, yPos + 75, { width: 100, align: 'right' });
+    
+    // Notes
+    if (cn.notes) {
+      yPos += 130;
+      doc.fillColor(darkGray).fontSize(9).font('Helvetica-Bold').text('Notes:', 50, yPos);
+      doc.font('Helvetica').text(cn.notes, 50, yPos + 15, { width: 495 });
+    }
+    
+    // Footer
+    doc.fontSize(8).fillColor('#64748b');
+    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, 50, 780);
+    
+    doc.end();
+    
+    // Audit log
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Credit Note PDF Downloaded', `Credit Note ${cn.credit_number}`]
+    );
+    
+  } catch (err) {
+    console.error('Credit note PDF error:', err);
+    res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
+// Send Credit Note via email
+app.post('/api/credit-notes/:id/send-email', authenticateToken, requirePermission('canRaisePO'), async (req, res) => {
+  try {
+    const { to_email, cc_email } = req.body;
+    
+    // Get credit note
+    const cnResult = await pool.query(
+      `SELECT cn.*, c.name as contractor_name, c.email as contractor_email, c.code as contractor_code,
+       c.address_line1 as contractor_address1, c.address_line2 as contractor_address2,
+       c.city as contractor_city, c.postcode as contractor_postcode, c.vat_number as contractor_vat,
+       po.po_number, po.week_commencing, po.week_ending,
+       u1.full_name as created_by_name, u2.full_name as authorised_by_name
+       FROM credit_notes cn
+       LEFT JOIN contractors c ON cn.contractor_id = c.id
+       LEFT JOIN purchase_orders po ON cn.po_id = po.id
+       LEFT JOIN users u1 ON cn.created_by = u1.id
+       LEFT JOIN users u2 ON cn.authorised_by = u2.id
+       WHERE cn.id = $1`,
+      [req.params.id]
+    );
+    
+    if (cnResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Credit note not found' });
+    }
+    
+    const cn = cnResult.rows[0];
+    
+    if (cn.status !== 'authorised') {
+      return res.status(400).json({ error: 'Credit note must be authorised before sending' });
+    }
+    
+    // Get lines
+    const linesResult = await pool.query(
+      `SELECT * FROM credit_note_lines WHERE credit_id = $1 ORDER BY movement_date`,
+      [req.params.id]
+    );
+    const lines = linesResult.rows;
+    
+    // Get company settings
+    const settingsResult = await pool.query('SELECT * FROM company_settings');
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+    
+    // Check SMTP config
+    const smtpHost = settings.smtp_host || process.env.SMTP_HOST;
+    const smtpUser = settings.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settings.smtp_pass || process.env.SMTP_PASS;
+    
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.status(400).json({ error: 'SMTP not configured', requiresConfig: true });
+    }
+    
+    // Generate PDF buffer
+    const pdfBuffer = await generateCreditNotePdfBuffer(cn, lines, settings);
+    
+    // Create transporter
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(settings.smtp_port || process.env.SMTP_PORT || '587'),
+      secure: false,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    
+    const recipientEmail = to_email || cn.contractor_email;
+    const fromEmail = settings.smtp_from || process.env.SMTP_FROM || smtpUser;
+    
+    // Generate HTML email
+    const emailHtml = generateCreditNoteEmailHTML(cn, lines, settings);
+    
+    // Send email
+    await transporter.sendMail({
+      from: `"${settings.company_name || 'DX Network Services'}" <${fromEmail}>`,
+      to: recipientEmail,
+      cc: cc_email || undefined,
+      subject: `Credit Note ${cn.credit_number} - ${settings.company_name || 'DX Network Services'}`,
+      html: emailHtml,
+      attachments: [{
+        filename: `Credit_Note_${cn.credit_number}.pdf`,
+        content: pdfBuffer
+      }]
+    });
+    
+    // Update credit note status
+    await pool.query(
+      `UPDATE credit_notes SET status = 'sent', sent_at = NOW(), sent_to = $1, updated_at = NOW() WHERE id = $2`,
+      [recipientEmail, req.params.id]
+    );
+    
+    await pool.query(
+      'INSERT INTO audit_log (user_name, action, details) VALUES ($1, $2, $3)',
+      [req.user.fullName, 'Credit Note Sent', `Credit Note ${cn.credit_number} sent to ${recipientEmail}`]
+    );
+    
+    res.json({ message: `Credit Note sent to ${recipientEmail}` });
+    
+  } catch (err) {
+    console.error('Send credit note email error:', err);
+    res.status(500).json({ error: 'Failed to send email: ' + err.message });
+  }
+});
+
+// Helper: Generate Credit Note PDF Buffer
+async function generateCreditNotePdfBuffer(cn, lines, settings) {
+  return new Promise((resolve, reject) => {
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    
+    const dxRed = '#DC2626';
+    const darkGray = '#1e293b';
+    
+    // Header with logo
+    const logoPath = path.join(__dirname, 'public', 'dx_freight_logo.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 40, { width: 120 });
+    }
+    
+    doc.fontSize(24).fillColor(dxRed).font('Helvetica-Bold');
+    doc.text('CREDIT NOTE', 350, 50, { width: 195, align: 'right' });
+    doc.fontSize(12).fillColor(darkGray).font('Helvetica');
+    doc.text(cn.credit_number, 350, 80, { width: 195, align: 'right' });
+    
+    let yPos = 130;
+    
+    // From Box
+    doc.rect(50, yPos, 240, 80).fillColor('#fef2f2').fill();
+    doc.fillColor(dxRed).fontSize(9).font('Helvetica-Bold').text('FROM:', 60, yPos + 10);
+    doc.fillColor(darkGray).font('Helvetica-Bold').fontSize(10).text(settings.company_name || 'DX Network Services Ltd', 60, yPos + 25);
+    doc.font('Helvetica').fontSize(9);
+    if (settings.company_address_line1) doc.text(settings.company_address_line1, 60, yPos + 40);
+    
+    // To Box
+    doc.rect(305, yPos, 240, 80).fillColor('#f8fafc').fill();
+    doc.fillColor(dxRed).fontSize(9).font('Helvetica-Bold').text('TO:', 315, yPos + 10);
+    doc.fillColor(darkGray).font('Helvetica-Bold').fontSize(10).text(cn.contractor_name || '', 315, yPos + 25);
+    
+    // Details
+    yPos = 225;
+    doc.rect(50, yPos, 495, 40).fillColor('#fef2f2').fill();
+    doc.fillColor(darkGray).fontSize(9).font('Helvetica-Bold').text('Against PO:', 60, yPos + 8);
+    doc.font('Helvetica').text(cn.po_number || '-', 130, yPos + 8);
+    doc.font('Helvetica-Bold').text('Reason:', 60, yPos + 24);
+    doc.font('Helvetica').text(cn.reason || '-', 110, yPos + 24, { width: 420 });
+    
+    // Line items
+    yPos = 280;
+    doc.rect(50, yPos, 495, 20).fillColor(dxRed).fill();
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+    doc.text('Date', 55, yPos + 6);
+    doc.text('Route', 120, yPos + 6);
+    doc.text('Reason', 180, yPos + 6);
+    doc.text('Amount', 450, yPos + 6, { width: 90, align: 'right' });
+    yPos += 20;
+    
+    for (const line of lines) {
+      doc.fillColor(darkGray).fontSize(8).font('Helvetica');
+      doc.text(new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), 55, yPos + 5);
+      doc.font('Helvetica-Bold').text(line.route_ref || '-', 120, yPos + 5);
+      doc.font('Helvetica').text(line.reason || '-', 180, yPos + 5, { width: 260 });
+      doc.font('Helvetica-Bold').fillColor(dxRed).text(`-£${parseFloat(line.line_total).toFixed(2)}`, 450, yPos + 5, { width: 90, align: 'right' });
+      yPos += 20;
+    }
+    
+    // Totals
+    yPos += 20;
+    doc.fillColor(darkGray).fontSize(9).font('Helvetica');
+    doc.text('Subtotal:', 360, yPos); doc.text(`-£${parseFloat(cn.subtotal).toFixed(2)}`, 440, yPos, { width: 100, align: 'right' });
+    doc.text('FSC:', 360, yPos + 15); doc.text(`-£${parseFloat(cn.fsc_total).toFixed(2)}`, 440, yPos + 15, { width: 100, align: 'right' });
+    doc.text('VAT:', 360, yPos + 30); doc.text(`-£${parseFloat(cn.vat_amount).toFixed(2)}`, 440, yPos + 30, { width: 100, align: 'right' });
+    
+    doc.fillColor(dxRed).fontSize(11).font('Helvetica-Bold');
+    doc.text('CREDIT TOTAL:', 360, yPos + 50);
+    doc.text(`-£${parseFloat(cn.grand_total).toFixed(2)}`, 440, yPos + 50, { width: 100, align: 'right' });
+    
+    doc.end();
+  });
+}
+
+// Helper: Generate Credit Note Email HTML
+function generateCreditNoteEmailHTML(cn, lines, settings) {
+  const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Holiday' };
+  
+  let linesHTML = '';
+  for (const line of lines) {
+    linesHTML += `
+      <tr style="border-bottom: 1px solid #fecaca;">
+        <td style="padding: 10px 8px; font-size: 12px;">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
+        <td style="padding: 10px 8px; font-family: monospace; font-weight: 600;">${line.route_ref || '-'}</td>
+        <td style="padding: 10px 8px; font-size: 11px;">${line.reason || '-'}</td>
+        <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: #DC2626;">-£${parseFloat(line.line_total).toFixed(2)}</td>
+      </tr>
+    `;
+  }
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Credit Note ${cn.credit_number}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f1f5f9;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 700px; margin: 0 auto; background-color: #ffffff;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); padding: 30px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">CREDIT NOTE</h1>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 18px;">${cn.credit_number}</p>
+      </td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 20px 30px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="50%" valign="top" style="padding-right: 15px;">
+              <p style="color: #DC2626; font-weight: bold; font-size: 12px; margin: 0 0 8px 0;">FROM:</p>
+              <p style="margin: 0; font-weight: bold;">${settings.company_name || 'DX Network Services Ltd'}</p>
+              <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${settings.company_address_line1 || ''}</p>
+            </td>
+            <td width="50%" valign="top" style="padding-left: 15px;">
+              <p style="color: #DC2626; font-weight: bold; font-size: 12px; margin: 0 0 8px 0;">TO:</p>
+              <p style="margin: 0; font-weight: bold;">${cn.contractor_name}</p>
+              <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${cn.contractor_address1 || ''}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 0 30px 20px 30px;">
+        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 15px;">
+          <p style="margin: 0; font-size: 13px;"><strong>Against PO:</strong> ${cn.po_number}</p>
+          <p style="margin: 8px 0 0 0; font-size: 13px;"><strong>Reason:</strong> ${cn.reason}</p>
+        </div>
+      </td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 0 30px 20px 30px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #fecaca; border-radius: 6px; overflow: hidden;">
+          <thead>
+            <tr style="background-color: #DC2626;">
+              <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px;">Date</th>
+              <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px;">Route</th>
+              <th style="padding: 12px 8px; text-align: left; color: #ffffff; font-size: 11px;">Reason</th>
+              <th style="padding: 12px 8px; text-align: right; color: #ffffff; font-size: 11px;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${linesHTML}</tbody>
+        </table>
+      </td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 0 30px 30px 30px;">
+        <table width="280" align="right" cellpadding="0" cellspacing="0" style="background-color: #fef2f2; border-radius: 6px;">
+          <tr><td style="padding: 12px 15px; font-size: 13px;">Subtotal:</td><td style="padding: 12px 15px; text-align: right; font-size: 13px;">-£${parseFloat(cn.subtotal).toFixed(2)}</td></tr>
+          <tr><td style="padding: 12px 15px; font-size: 13px;">FSC:</td><td style="padding: 12px 15px; text-align: right; font-size: 13px;">-£${parseFloat(cn.fsc_total).toFixed(2)}</td></tr>
+          <tr><td style="padding: 12px 15px; font-size: 13px;">VAT:</td><td style="padding: 12px 15px; text-align: right; font-size: 13px;">-£${parseFloat(cn.vat_amount).toFixed(2)}</td></tr>
+          <tr style="background-color: #DC2626;">
+            <td style="padding: 15px; color: #ffffff; font-weight: bold; font-size: 14px;">CREDIT TOTAL:</td>
+            <td style="padding: 15px; color: #ffffff; font-weight: bold; font-size: 14px; text-align: right;">-£${parseFloat(cn.grand_total).toFixed(2)}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    
+    <tr>
+      <td style="background-color: #1e293b; padding: 20px 30px; text-align: center;">
+        <p style="color: #94a3b8; font-size: 11px; margin: 0;">This credit note was generated by ${settings.company_name || 'DX Network Services'}</p>
+        <p style="color: #64748b; font-size: 10px; margin: 8px 0 0 0;">Generated: ${new Date().toLocaleString('en-GB')}</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+
 // ============ COSTING REPORTS ============
 
 // Weekly cost report by contractor

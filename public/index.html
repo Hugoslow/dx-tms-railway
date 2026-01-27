@@ -1149,6 +1149,7 @@
                     <div id="costing-tab-credit-notes" class="costing-tab-panel p-4 hidden">
                         <div class="flex items-center justify-between mb-4">
                             <h4 class="font-medium text-slate-700">Credit Notes</h4>
+                            <button onclick="openCreateCreditNoteModal()" class="flex items-center gap-2 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"><i data-lucide="minus-circle" class="w-4 h-4"></i>Create Credit Note</button>
                         </div>
                         <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
                             <th class="px-3 py-2 text-left text-xs font-semibold text-slate-600">Credit No.</th>
@@ -1426,6 +1427,103 @@
                 <button onclick="closeSendEmailModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
                 <button id="sendEmailBtn" onclick="sendPOEmail()" class="px-6 py-2 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600 flex items-center gap-2">
                     <i data-lucide="send" class="w-4 h-4"></i> Send Email
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Credit Note Modal -->
+    <div id="createCreditNoteModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="bg-red-500 px-6 py-4 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2"><i data-lucide="minus-circle" class="w-5 h-5"></i> Create Credit Note</h2>
+                <button onclick="closeCreateCreditNoteModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div class="p-6 flex-1 overflow-y-auto">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Select Purchase Order *</label>
+                        <select id="creditNotePO" onchange="loadPOLinesForCredit()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="">-- Select a PO --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Overall Reason *</label>
+                        <input type="text" id="creditNoteReason" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="e.g. Service not performed">
+                    </div>
+                </div>
+                
+                <div id="creditNotePODetails" class="hidden mb-4 p-4 bg-slate-50 rounded-lg">
+                    <div class="grid grid-cols-3 gap-4 text-sm">
+                        <div><span class="text-slate-500">Contractor:</span> <strong id="creditPOContractor"></strong></div>
+                        <div><span class="text-slate-500">Week:</span> <strong id="creditPOWeek"></strong></div>
+                        <div><span class="text-slate-500">PO Total:</span> <strong id="creditPOTotal"></strong></div>
+                    </div>
+                </div>
+                
+                <div id="creditNoteLinesSection" class="hidden">
+                    <p class="text-sm font-medium text-slate-700 mb-2">Select lines to credit:</p>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden mb-4">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500 w-10"><input type="checkbox" id="creditSelectAll" onchange="toggleAllCreditLines()"></th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Route</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Vehicle</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Day Type</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-slate-500">Amount</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Line Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="creditNoteLinesBody"></tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4 w-72">
+                            <h5 class="font-medium text-red-800 mb-2">Credit Summary</h5>
+                            <div class="space-y-1 text-sm">
+                                <div class="flex justify-between"><span>Lines Selected:</span><span id="creditLinesCount">0</span></div>
+                                <div class="flex justify-between"><span>Subtotal:</span><span>-£<span id="creditSubtotal">0.00</span></span></div>
+                                <div class="flex justify-between"><span>FSC:</span><span>-£<span id="creditFSC">0.00</span></span></div>
+                                <div class="flex justify-between"><span>VAT:</span><span>-£<span id="creditVAT">0.00</span></span></div>
+                                <div class="flex justify-between font-bold text-red-700 text-lg border-t pt-2 mt-2"><span>Credit Total:</span><span>-£<span id="creditGrandTotal">0.00</span></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                    <textarea id="creditNoteNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="Any additional notes..."></textarea>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 bg-slate-50 flex justify-between items-center">
+                <button onclick="closeCreateCreditNoteModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Cancel</button>
+                <button onclick="createCreditNote()" class="px-6 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 flex items-center gap-2">
+                    <i data-lucide="minus-circle" class="w-4 h-4"></i> Create Credit Note
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Credit Note Modal -->
+    <div id="viewCreditNoteModal" class="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-red-500 px-6 py-4 flex items-center justify-between sticky top-0">
+                <h2 class="text-xl font-bold text-white">Credit Note Details</h2>
+                <button onclick="closeViewCreditNoteModal()" class="text-white/70 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div id="viewCreditNoteContent" class="p-6">
+                <div class="text-center text-slate-500">Loading...</div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 flex justify-between items-center">
+                <button onclick="closeViewCreditNoteModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300">Close</button>
+                <button onclick="downloadCurrentCreditNote()" class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> Download PDF
                 </button>
             </div>
         </div>
@@ -4290,14 +4388,325 @@
                     <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-xs ${statusColors[cn.status] || 'bg-slate-100'}">${cn.status}</span></td>
                     <td class="px-3 py-2 text-sm">${new Date(cn.created_at).toLocaleDateString('en-GB')}</td>
                     <td class="px-3 py-2">
-                        <button onclick="viewCreditNote(${cn.id})" class="text-blue-600 hover:text-blue-800 text-sm">View</button>
+                        <button onclick="viewCreditNote(${cn.id})" class="text-blue-600 hover:text-blue-800 text-sm mr-2">View</button>
+                        <button onclick="downloadCreditNotePdf(${cn.id}, '${cn.credit_number}')" class="text-purple-600 hover:text-purple-800 text-sm mr-2" title="Download PDF"><i data-lucide="file-down" class="w-4 h-4 inline"></i></button>
+                        ${cn.status === 'draft' && getPermissions().canAuthorisePO ? `<button onclick="authoriseCreditNote(${cn.id})" class="text-emerald-600 hover:text-emerald-800 text-sm mr-2">Authorise</button>` : ''}
+                        ${cn.status === 'authorised' ? `<button onclick="openSendCreditNoteEmailModal(${cn.id}, '${cn.credit_number}')" class="text-amber-600 hover:text-amber-800 text-sm" title="Send via email"><i data-lucide="send" class="w-4 h-4 inline"></i></button>` : ''}
+                        ${cn.status === 'sent' ? `<span class="text-xs text-emerald-600"><i data-lucide="check-circle" class="w-4 h-4 inline"></i></span>` : ''}
                     </td>
                 </tr>
             `).join('');
+            
+            lucide.createIcons();
         }
         
-        function viewCreditNote(id) {
-            showToast('Credit note view coming soon');
+        // Credit note creation state
+        let creditNotePOData = null;
+        let creditNotePOLines = [];
+        
+        function openCreateCreditNoteModal() {
+            document.getElementById('createCreditNoteModal').classList.remove('hidden');
+            loadPOsForCreditNote();
+            resetCreditNoteForm();
+        }
+        
+        function closeCreateCreditNoteModal() {
+            document.getElementById('createCreditNoteModal').classList.add('hidden');
+            resetCreditNoteForm();
+        }
+        
+        function resetCreditNoteForm() {
+            document.getElementById('creditNotePO').value = '';
+            document.getElementById('creditNoteReason').value = '';
+            document.getElementById('creditNoteNotes').value = '';
+            document.getElementById('creditNotePODetails').classList.add('hidden');
+            document.getElementById('creditNoteLinesSection').classList.add('hidden');
+            creditNotePOData = null;
+            creditNotePOLines = [];
+            updateCreditTotals();
+        }
+        
+        async function loadPOsForCreditNote() {
+            try {
+                const pos = await api('/purchase-orders?status=sent');
+                const select = document.getElementById('creditNotePO');
+                select.innerHTML = '<option value="">-- Select a PO --</option>' + 
+                    pos.map(po => `<option value="${po.id}">${po.po_number} - ${po.contractor_name} (£${parseFloat(po.grand_total).toFixed(2)})</option>`).join('');
+            } catch (err) {
+                console.error('Load POs error:', err);
+            }
+        }
+        
+        async function loadPOLinesForCredit() {
+            const poId = document.getElementById('creditNotePO').value;
+            if (!poId) {
+                document.getElementById('creditNotePODetails').classList.add('hidden');
+                document.getElementById('creditNoteLinesSection').classList.add('hidden');
+                return;
+            }
+            
+            try {
+                const po = await api(`/purchase-orders/${poId}`);
+                creditNotePOData = po;
+                creditNotePOLines = po.lines || [];
+                
+                // Show PO details
+                document.getElementById('creditPOContractor').textContent = po.contractor_name;
+                document.getElementById('creditPOWeek').textContent = `${new Date(po.week_commencing).toLocaleDateString('en-GB')} - ${new Date(po.week_ending).toLocaleDateString('en-GB')}`;
+                document.getElementById('creditPOTotal').textContent = `£${parseFloat(po.grand_total).toFixed(2)}`;
+                document.getElementById('creditNotePODetails').classList.remove('hidden');
+                
+                // Render lines
+                const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Holiday' };
+                const body = document.getElementById('creditNoteLinesBody');
+                body.innerHTML = creditNotePOLines.map((line, idx) => `
+                    <tr class="border-b border-slate-100">
+                        <td class="px-2 py-2"><input type="checkbox" class="credit-line-check" data-idx="${idx}" onchange="updateCreditTotals()"></td>
+                        <td class="px-2 py-2 text-sm">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
+                        <td class="px-2 py-2 font-mono text-sm font-medium">${line.route_ref}</td>
+                        <td class="px-2 py-2 text-xs">${line.vehicle_type || 'ARTIC'}</td>
+                        <td class="px-2 py-2 text-xs">${dayTypeLabels[line.day_type] || line.day_type}</td>
+                        <td class="px-2 py-2 text-right font-medium">£${parseFloat(line.line_total).toFixed(2)}</td>
+                        <td class="px-2 py-2"><input type="text" class="credit-line-reason w-full px-2 py-1 border border-slate-200 rounded text-xs" data-idx="${idx}" placeholder="Reason (optional)"></td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('creditNoteLinesSection').classList.remove('hidden');
+                document.getElementById('creditSelectAll').checked = false;
+                updateCreditTotals();
+            } catch (err) {
+                console.error('Load PO lines error:', err);
+                showToast('Failed to load PO details', 'error');
+            }
+        }
+        
+        function toggleAllCreditLines() {
+            const selectAll = document.getElementById('creditSelectAll').checked;
+            document.querySelectorAll('.credit-line-check').forEach(cb => cb.checked = selectAll);
+            updateCreditTotals();
+        }
+        
+        function updateCreditTotals() {
+            const checkboxes = document.querySelectorAll('.credit-line-check:checked');
+            let subtotal = 0;
+            let fsc = 0;
+            
+            checkboxes.forEach(cb => {
+                const idx = parseInt(cb.dataset.idx);
+                const line = creditNotePOLines[idx];
+                if (line) {
+                    subtotal += parseFloat(line.base_cost);
+                    fsc += parseFloat(line.fsc_amount);
+                }
+            });
+            
+            const vatRate = 0.20; // 20% VAT
+            const vat = (subtotal + fsc) * vatRate;
+            const total = subtotal + fsc + vat;
+            
+            document.getElementById('creditLinesCount').textContent = checkboxes.length;
+            document.getElementById('creditSubtotal').textContent = subtotal.toFixed(2);
+            document.getElementById('creditFSC').textContent = fsc.toFixed(2);
+            document.getElementById('creditVAT').textContent = vat.toFixed(2);
+            document.getElementById('creditGrandTotal').textContent = total.toFixed(2);
+        }
+        
+        async function createCreditNote() {
+            const poId = document.getElementById('creditNotePO').value;
+            const reason = document.getElementById('creditNoteReason').value.trim();
+            const notes = document.getElementById('creditNoteNotes').value.trim();
+            
+            if (!poId) {
+                showToast('Please select a Purchase Order', 'error');
+                return;
+            }
+            if (!reason) {
+                showToast('Please enter a reason', 'error');
+                return;
+            }
+            
+            const checkboxes = document.querySelectorAll('.credit-line-check:checked');
+            if (checkboxes.length === 0) {
+                showToast('Please select at least one line to credit', 'error');
+                return;
+            }
+            
+            // Build selected lines
+            const selectedLines = [];
+            checkboxes.forEach(cb => {
+                const idx = parseInt(cb.dataset.idx);
+                const reasonInput = document.querySelector(`.credit-line-reason[data-idx="${idx}"]`);
+                const line = creditNotePOLines[idx];
+                selectedLines.push({
+                    original_po_line_id: line.id,
+                    movement_date: line.movement_date,
+                    route_ref: line.route_ref,
+                    trunk_id: line.trunk_id,
+                    reason: reasonInput?.value || reason,
+                    base_cost: line.base_cost,
+                    fsc_amount: line.fsc_amount,
+                    line_total: line.line_total
+                });
+            });
+            
+            try {
+                const result = await api('/credit-notes', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        po_id: poId,
+                        contractor_id: creditNotePOData.contractor_id,
+                        reason,
+                        notes,
+                        lines: selectedLines
+                    })
+                });
+                
+                showToast(`Credit Note ${result.credit_number} created`);
+                closeCreateCreditNoteModal();
+                loadCreditNotes();
+            } catch (err) {
+                console.error('Create credit note error:', err);
+                showToast('Failed to create credit note', 'error');
+            }
+        }
+        
+        async function viewCreditNote(id) {
+            try {
+                const cn = await api(`/credit-notes/${id}`);
+                
+                const dayTypeLabels = { weekday: 'Weekday', weekend: 'Weekend', bank_holiday: 'Bank Holiday' };
+                const statusColors = { draft: 'bg-slate-100 text-slate-600', authorised: 'bg-amber-100 text-amber-700', sent: 'bg-emerald-100 text-emerald-700' };
+                
+                let linesHtml = (cn.lines || []).map(line => `
+                    <tr class="border-b border-slate-100">
+                        <td class="px-2 py-2 text-sm">${new Date(line.movement_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
+                        <td class="px-2 py-2 font-mono text-sm font-medium">${line.route_ref}</td>
+                        <td class="px-2 py-2 text-xs">${line.reason || '-'}</td>
+                        <td class="px-2 py-2 text-right font-medium text-red-600">-£${parseFloat(line.line_total).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('viewCreditNoteContent').innerHTML = `
+                    <div class="grid grid-cols-2 gap-6 mb-6">
+                        <div>
+                            <h3 class="text-lg font-bold text-red-600 mb-2">${cn.credit_number}</h3>
+                            <p class="text-sm text-slate-600">Against PO: <strong>${cn.po_number}</strong></p>
+                            <p class="text-sm text-slate-600">Created: ${new Date(cn.created_at).toLocaleDateString('en-GB')} by ${cn.created_by_name || '-'}</p>
+                            ${cn.authorised_by_name ? `<p class="text-sm text-slate-600">Authorised by: ${cn.authorised_by_name}</p>` : ''}
+                            <span class="inline-block mt-2 px-2 py-0.5 rounded text-xs ${statusColors[cn.status]}">${cn.status.toUpperCase()}</span>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-medium text-slate-800">${cn.contractor_name}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                        <p class="text-sm text-red-800"><strong>Reason:</strong> ${cn.reason}</p>
+                    </div>
+                    
+                    <div class="border border-slate-200 rounded-lg overflow-hidden mb-4">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Date</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Route</th>
+                                    <th class="px-2 py-2 text-left text-xs font-medium text-slate-500">Line Reason</th>
+                                    <th class="px-2 py-2 text-right text-xs font-medium text-slate-500">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>${linesHtml}</tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4 w-64">
+                            <div class="flex justify-between text-sm mb-1"><span>Subtotal:</span><span>-£${parseFloat(cn.subtotal).toFixed(2)}</span></div>
+                            <div class="flex justify-between text-sm mb-1"><span>FSC:</span><span>-£${parseFloat(cn.fsc_total).toFixed(2)}</span></div>
+                            <div class="flex justify-between text-sm mb-2"><span>VAT:</span><span>-£${parseFloat(cn.vat_amount).toFixed(2)}</span></div>
+                            <div class="flex justify-between text-lg font-bold text-red-700 border-t border-red-200 pt-2"><span>Credit Total:</span><span>-£${parseFloat(cn.grand_total).toFixed(2)}</span></div>
+                        </div>
+                    </div>
+                    
+                    ${cn.notes ? `<div class="mt-4 p-3 bg-slate-50 rounded-lg text-sm"><strong>Notes:</strong> ${cn.notes}</div>` : ''}
+                `;
+                
+                window.currentViewCreditNoteId = id;
+                window.currentViewCreditNoteNumber = cn.credit_number;
+                
+                document.getElementById('viewCreditNoteModal').classList.remove('hidden');
+            } catch (err) {
+                console.error('View credit note error:', err);
+                showToast('Failed to load credit note details', 'error');
+            }
+        }
+        
+        function closeViewCreditNoteModal() {
+            document.getElementById('viewCreditNoteModal').classList.add('hidden');
+        }
+        
+        function downloadCurrentCreditNote() {
+            if (window.currentViewCreditNoteId && window.currentViewCreditNoteNumber) {
+                downloadCreditNotePdf(window.currentViewCreditNoteId, window.currentViewCreditNoteNumber);
+            }
+        }
+        
+        async function downloadCreditNotePdf(id, creditNumber) {
+            try {
+                showToast('Generating PDF...');
+                
+                const response = await fetch(`/api/credit-notes/${id}/pdf`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) throw new Error('PDF generation failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Credit_Note_${creditNumber}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showToast('PDF downloaded');
+            } catch (err) {
+                console.error('Download PDF error:', err);
+                showToast('Failed to download PDF', 'error');
+            }
+        }
+        
+        async function authoriseCreditNote(id) {
+            if (!confirm('Are you sure you want to authorise this Credit Note?')) return;
+            
+            try {
+                await api(`/credit-notes/${id}/authorise`, { method: 'PUT' });
+                showToast('Credit Note authorised');
+                loadCreditNotes();
+            } catch (err) {
+                console.error('Authorise credit note error:', err);
+                showToast('Failed to authorise credit note', 'error');
+            }
+        }
+        
+        async function openSendCreditNoteEmailModal(id, creditNumber) {
+            // For now, use simple prompt - can enhance with full modal later
+            const email = prompt('Enter email address to send Credit Note to:');
+            if (!email) return;
+            
+            try {
+                showToast('Sending Credit Note...');
+                const result = await api(`/credit-notes/${id}/send-email`, {
+                    method: 'POST',
+                    body: JSON.stringify({ to_email: email })
+                });
+                showToast(result.message);
+                loadCreditNotes();
+            } catch (err) {
+                console.error('Send credit note error:', err);
+                showToast('Failed to send credit note', 'error');
+            }
         }
         
         // ============ REPORTS ============

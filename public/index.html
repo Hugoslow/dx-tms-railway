@@ -575,6 +575,7 @@
                 <button onclick="showView('live-board')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-live-board" data-view="live-board"><i data-lucide="monitor" class="w-4 h-4"></i>Live Board</button>
                 <button onclick="showView('schedule')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-schedule" data-view="schedule"><i data-lucide="calendar" class="w-4 h-4"></i>Schedule</button>
                 <button onclick="showView('depot-departure')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-depot-departure" data-view="depot-departure"><i data-lucide="log-out" class="w-4 h-4"></i>Depot Departure</button>
+                <button onclick="showView('depot-arrival')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-depot-arrival" data-view="depot-arrival"><i data-lucide="map-pin" class="w-4 h-4"></i>Depot Arrival</button>
                 <button onclick="showView('hub-arrival')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-hub-arrival" data-view="hub-arrival"><i data-lucide="log-in" class="w-4 h-4"></i>Hub Arrival</button>
                 <button onclick="showView('hub-operations')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-hub-operations" data-view="hub-operations"><i data-lucide="warehouse" class="w-4 h-4"></i>Hub Operations</button>
                 <button onclick="showView('audit-log')" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 tab-audit-log" data-view="audit-log"><i data-lucide="file-text" class="w-4 h-4"></i>Audit Log</button>
@@ -673,6 +674,29 @@
                 </div>
             </div>
 
+            <!-- Depot Arrival View -->
+            <div id="view-depot-arrival" class="view-panel hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-orange-50"><h3 class="font-semibold text-orange-800 flex items-center gap-2"><i data-lucide="map-pin" class="w-5 h-5"></i>Log Depot Arrival</h3></div><div class="p-4 space-y-4">
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="depotArrTrunkSelect" onchange="onDepotArrivalTrunkSelect()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Arrival Time</label><input type="time" id="depotArrTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Seal</label><input type="text" id="depotArrSeal" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trailer</label><input type="text" id="depotArrTrailer" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase" placeholder="Trailer number"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Notes</label><textarea id="depotArrNotes" rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="Optional notes"></textarea></div>
+                        <button onclick="logDepotArrival()" class="w-full py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700">Log Arrival</button>
+                    </div></div></div>
+                    <div class="lg:col-span-2"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between"><h3 class="font-semibold text-slate-800">Expected at Depot <span class="text-slate-400 font-normal text-sm" id="depotExpectedCount"></span></h3><select id="depotArrivalFilter" onchange="renderDepotArrival()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Depots</option></select></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Trunk</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Route Ref</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Origin</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Destination</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Departed</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Sched ETA</th>
+                        <th class="px-3 py-3 text-left text-xs font-semibold text-indigo-700 uppercase bg-indigo-50">Live ETA</th>
+                    </tr></thead><tbody id="depotExpectedBody"></tbody></table></div></div></div>
+                </div>
+            </div>
+
             <!-- Hub Arrival View -->
             <div id="view-hub-arrival" class="view-panel hidden">
                 <div id="arrivalContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -681,7 +705,7 @@
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Gate Time</label><input type="time" id="arrGateTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Seal</label><input type="text" id="arrSealVerify" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Trailer</label><input type="text" id="arrTrailer" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase" placeholder="Trailer number"></div>
-                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Destination Hub</label><select id="arrDestHub" onchange="loadAvailableBays()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select Hub --</option><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Destination Hub</label><select id="arrDestHub" onchange="loadAvailableBays()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select Hub --</option><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option><option value="BRACKNELL HUB">Bracknell Hub</option><option value="BRISTOL HUB">Bristol Hub</option><option value="HAYDOCK HUB">Haydock Hub</option><option value="LEEDS HUB">Leeds Hub</option></select></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Assign Bay</label><select id="arrBay" onchange="showBayDesignation()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select Hub First --</option></select><p class="text-xs text-slate-500 mt-1" id="bayDesignationHint"></p></div>
                         <div><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="arrSendToHolding" onchange="toggleBaySelect()" class="rounded border-slate-300"><span class="text-sm text-slate-600">No bay available - send to holding area</span></label></div>
                         <button onclick="logArrival()" class="w-full py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">Log Arrival</button>
@@ -707,7 +731,7 @@
                         <button onclick="showHubOpsView('yardmap')" id="hubOpsYardBtn" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium flex items-center gap-2"><i data-lucide="layout-grid" class="w-4 h-4"></i>Yard Map</button>
                     </div>
                     <div id="yardMapHubSelector" class="hidden">
-                        <select id="yardMapHub" onchange="loadYardMap()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option></select>
+                        <select id="yardMapHub" onchange="loadYardMap()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option><option value="BRACKNELL HUB">Bracknell Hub</option><option value="BRISTOL HUB">Bristol Hub</option><option value="HAYDOCK HUB">Haydock Hub</option><option value="LEEDS HUB">Leeds Hub</option></select>
                     </div>
                 </div>
                 
@@ -1760,20 +1784,20 @@
         const rolePermissions = { 
             'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule'] },
-            'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure'] },
+            'depot': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'depot-arrival'] },
             'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['schedule', 'hub-arrival'] },
             'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'hub-arrival', 'hub-operations', 'metrics'] },
             'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics'] },
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'depot-arrival', 'hub-arrival', 'hub-operations', 'metrics'] },
             'planner': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: false, canPullReports: false, canManageCosts: false,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'metrics', 'costing'] },
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'depot-arrival', 'hub-arrival', 'hub-operations', 'metrics', 'costing'] },
             'finance': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: true, canViewFuture: true, canCopyDates: false, canViewCosts: true, canRaisePO: false, canAuthorisePO: false, canPullReports: true, canManageCosts: false,
                 tabs: ['dashboard', 'live-board', 'schedule', 'metrics', 'costing'] },
             'admin': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: true, canAmendTrunk: true, canViewPast: true, canViewFuture: true, canCopyDates: true, canViewCosts: true, canRaisePO: true, canAuthorisePO: true, canPullReports: true, canManageCosts: true,
-                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'costing', 'users'] }
+                tabs: ['dashboard', 'live-board', 'schedule', 'depot-departure', 'depot-arrival', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'costing', 'users'] }
         };
         const roleLabels = { 'viewer': 'Viewer', 'depot': 'Depot Staff', 'gatehouse': 'Gatehouse', 'hub-ops': 'Hub Operations', 'supervisor': 'Supervisor', 'planner': 'Planner', 'finance': 'Finance', 'admin': 'Admin' };
         function getPermissions() { return currentUser ? rolePermissions[currentUser.role] || rolePermissions['viewer'] : rolePermissions['viewer']; }
@@ -2149,7 +2173,7 @@
             const allowedTabs = perms.tabs || [];
             
             // Hide/show tabs based on role permissions
-            const allTabs = ['dashboard', 'live-board', 'schedule', 'depot-departure', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'users'];
+            const allTabs = ['dashboard', 'live-board', 'schedule', 'depot-departure', 'depot-arrival', 'hub-arrival', 'hub-operations', 'audit-log', 'metrics', 'costing', 'users'];
             allTabs.forEach(tab => {
                 const tabBtn = document.querySelector(`.tab-${tab}`);
                 if (tabBtn) {
@@ -2296,6 +2320,7 @@
             renderSchedule();
             updateDepotOriginFilter();
             renderDepotDeparture();
+            renderDepotArrival();
             renderHubArrival();
             renderHubOperations();
             renderAuditLog();
@@ -2822,6 +2847,117 @@
             // Only set default time if field is empty
             if (!document.getElementById('depTime').value) {
                 document.getElementById('depTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            }
+        }
+
+        // ============ DEPOT ARRIVAL FUNCTIONS ============
+        function renderDepotArrival() {
+            const depotFilter = document.getElementById('depotArrivalFilter')?.value || '';
+            
+            // Get movements in transit to non-hub destinations
+            let inTransit = movements.filter(t => {
+                if (!['departed', 'in-transit'].includes(t.status)) return false;
+                const dest = (t.destination || '').toUpperCase();
+                // Exclude hub destinations (those should use Hub Arrival)
+                return !hubs.some(h => dest.includes(h.split(' ')[0]));
+            });
+            
+            if (depotFilter) inTransit = inTransit.filter(t => t.destination === depotFilter);
+            inTransit = sortByOperationalArrivalTime(inTransit);
+            
+            // Preserve current selection
+            const currentSelection = document.getElementById('depotArrTrunkSelect')?.value || '';
+            
+            // Populate trunk dropdown
+            const selectEl = document.getElementById('depotArrTrunkSelect');
+            if (selectEl) {
+                selectEl.innerHTML = '<option value="">-- Select --</option>' + 
+                    inTransit.map(t => `<option value="${t.id}">${t.trunk_id} - ${t.origin} → ${t.destination}</option>`).join('');
+                if (currentSelection) selectEl.value = currentSelection;
+            }
+            
+            // Populate depot filter dropdown
+            const depots = [...new Set(inTransit.map(t => t.destination).filter(Boolean))].sort();
+            const filterEl = document.getElementById('depotArrivalFilter');
+            if (filterEl) {
+                const currentFilter = filterEl.value;
+                filterEl.innerHTML = '<option value="">All Depots</option>' + 
+                    depots.map(d => `<option value="${d}">${d}</option>`).join('');
+                if (currentFilter) filterEl.value = currentFilter;
+            }
+            
+            // Update count
+            const countEl = document.getElementById('depotExpectedCount');
+            if (countEl) countEl.textContent = `(${inTransit.length})`;
+            
+            // Render table
+            const tbody = document.getElementById('depotExpectedBody');
+            if (tbody) {
+                tbody.innerHTML = inTransit.slice(0, 100).map(t => {
+                    const liveEta = t.live_eta ? `<span class="font-semibold ${t.is_delayed ? 'text-red-600' : 'text-green-600'}">${t.live_eta}</span>` : '-';
+                    return `<tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="px-3 py-2 font-mono font-semibold">${t.trunk_id}</td>
+                        <td class="px-3 py-2 font-mono text-slate-600">${t.route_ref || ''}</td>
+                        <td class="px-3 py-2">${t.origin || ''}</td>
+                        <td class="px-3 py-2">${t.destination || ''}</td>
+                        <td class="px-3 py-2 font-mono">${t.actual_dep || ''}</td>
+                        <td class="px-3 py-2 font-mono">${t.scheduled_arr || ''}</td>
+                        <td class="px-3 py-2">${liveEta}</td>
+                    </tr>`;
+                }).join('');
+            }
+            
+            // Set default time if empty
+            if (!document.getElementById('depotArrTime')?.value) {
+                document.getElementById('depotArrTime').value = new Date().toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            }
+        }
+
+        function onDepotArrivalTrunkSelect() {
+            const id = document.getElementById('depotArrTrunkSelect')?.value;
+            if (!id) return;
+            
+            const movement = movements.find(m => m.id == id);
+            if (!movement) return;
+            
+            // Auto-fill trailer if available
+            if (movement.trailer) {
+                document.getElementById('depotArrTrailer').value = movement.trailer;
+            }
+        }
+
+        async function logDepotArrival() {
+            const id = document.getElementById('depotArrTrunkSelect').value;
+            const arrTime = document.getElementById('depotArrTime').value;
+            const seal = document.getElementById('depotArrSeal').value.trim().toUpperCase();
+            const trailer = document.getElementById('depotArrTrailer').value.trim().toUpperCase();
+            const notes = document.getElementById('depotArrNotes').value.trim();
+            
+            if (!id) return alert('Please select a trunk');
+            if (!arrTime) return alert('Please enter arrival time');
+            
+            try {
+                await api(`/movements/${id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        status: 'arrived',
+                        gate_arrival: arrTime,
+                        seal: seal || undefined,
+                        trailer: trailer || undefined,
+                        notes: notes || undefined
+                    })
+                });
+                
+                // Clear form
+                document.getElementById('depotArrTrunkSelect').value = '';
+                document.getElementById('depotArrTime').value = '';
+                document.getElementById('depotArrSeal').value = '';
+                document.getElementById('depotArrTrailer').value = '';
+                document.getElementById('depotArrNotes').value = '';
+                
+                await loadMovements();
+            } catch (err) {
+                alert('Error logging arrival: ' + err.message);
             }
         }
 
@@ -3446,12 +3582,23 @@
                 
                 const destination = (movement.destination || '').toUpperCase();
                 
+                // Check all hubs
                 if (destination.includes('NUNEATON') && destination.includes('HUB 1')) {
                     destHub.value = 'NUNEATON HUB 1';
-                } else if (destination.includes('NUNEATON') && destination.includes('HUB 2')) {
+                } else if (destination.includes('HUB 2') && destination.includes('NUNEATON')) {
+                    destHub.value = 'NUNEATON HUB 2';
+                } else if (destination.includes('NUNEATON') && destination.includes('2')) {
                     destHub.value = 'NUNEATON HUB 2';
                 } else if (destination.includes('NUNEATON')) {
                     destHub.value = 'NUNEATON HUB 1';
+                } else if (destination.includes('BRACKNELL')) {
+                    destHub.value = 'BRACKNELL HUB';
+                } else if (destination.includes('BRISTOL') && destination.includes('HUB')) {
+                    destHub.value = 'BRISTOL HUB';
+                } else if (destination.includes('HAYDOCK')) {
+                    destHub.value = 'HAYDOCK HUB';
+                } else if (destination.includes('LEEDS') && destination.includes('HUB')) {
+                    destHub.value = 'LEEDS HUB';
                 }
                 
                 if (destHub.value) loadAvailableBays();

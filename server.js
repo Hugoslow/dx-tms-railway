@@ -199,6 +199,31 @@ pool.query('SELECT NOW()', async (err, res) => {
         console.log('Yard bays seeded successfully');
       }
       
+      // Check if other hub bays need adding (placeholder for future layouts)
+      const otherHubs = ['BRACKNELL HUB', 'BRISTOL HUB', 'HAYDOCK HUB', 'LEEDS HUB'];
+      for (const hub of otherHubs) {
+        const hubBayCount = await pool.query('SELECT COUNT(*) FROM yard_bays WHERE hub = $1', [hub]);
+        if (parseInt(hubBayCount.rows[0].count) === 0) {
+          console.log(`Seeding placeholder bays for ${hub}...`);
+          
+          // Create 10 tipping bays (top)
+          for (let i = 1; i <= 10; i++) {
+            await pool.query(
+              `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+              [hub, i, 'tipping', 'top', null, i]
+            );
+          }
+          
+          // Create 10 loading bays (bottom)
+          for (let i = 20; i >= 11; i--) {
+            await pool.query(
+              `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+              [hub, i, 'loading', 'bottom', null, 21-i]
+            );
+          }
+        }
+      }
+      
       console.log('Yard map tables ready');
     } catch (yardErr) {
       console.error('Error creating yard tables:', yardErr);
@@ -304,7 +329,7 @@ function authenticateToken(req, res, next) {
 
 const rolePermissions = {
   'viewer': { canView: true, canLogDeparture: false, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
-  'depot': { canView: true, canLogDeparture: true, canLogArrival: false, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
+  'depot': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
   'gatehouse': { canView: true, canLogDeparture: false, canLogArrival: true, canUpdateOps: false, canManageTrunks: false, canManageUsers: false, canAmendTrunk: false, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
   'hub-ops': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: false, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },
   'supervisor': { canView: true, canLogDeparture: true, canLogArrival: true, canUpdateOps: true, canManageTrunks: true, canManageUsers: false, canAmendTrunk: true, canViewPast: false, canViewFuture: true, canCopyDates: false, canViewCosts: false, canRaisePO: false, canAuthorisePO: false, canPullReports: false, canManageCosts: false },

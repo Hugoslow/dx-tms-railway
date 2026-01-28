@@ -5845,6 +5845,23 @@ app.get('/api/schedule/contractor-codes', authenticateToken, async (req, res) =>
   }
 });
 
+// Get inactive schedule templates (for Add Trunk dropdown)
+app.get('/api/schedule/templates', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT trunk_id, route_ref, contractor, vehicle_type, origin, destination, 
+              scheduled_dep, scheduled_arr, direction 
+       FROM trunk_schedule 
+       WHERE active = false 
+       ORDER BY route_ref, trunk_id`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get templates error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============ YARD MAP API ENDPOINTS ============
 
 // Get all bays for a hub with current status

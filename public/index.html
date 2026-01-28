@@ -3258,9 +3258,11 @@
 
         // Load available bays when hub is selected
         async function loadAvailableBays() {
-            const hub = document.getElementById('arrDestHub').value;
+            const hub = document.getElementById('arrDestHub')?.value;
             const baySelect = document.getElementById('arrBay');
             const sendToHolding = document.getElementById('arrSendToHolding');
+            
+            if (!baySelect) return;
             
             if (!hub) {
                 baySelect.innerHTML = '<option value="">-- Select Hub First --</option>';
@@ -3270,10 +3272,12 @@
             try {
                 const bays = await api(`/yard/bays/${encodeURIComponent(hub)}/available`);
                 
-                if (bays.length === 0) {
+                if (!bays || bays.length === 0) {
                     baySelect.innerHTML = '<option value="">No bays available</option>';
-                    sendToHolding.checked = true;
-                    toggleBaySelect();
+                    if (sendToHolding) {
+                        sendToHolding.checked = true;
+                        toggleBaySelect();
+                    }
                     return;
                 }
                 
@@ -3301,53 +3305,75 @@
                 }
                 
                 baySelect.innerHTML = html;
-                sendToHolding.checked = false;
-                toggleBaySelect();
+                if (sendToHolding) {
+                    sendToHolding.checked = false;
+                    toggleBaySelect();
+                }
             } catch (error) {
                 console.error('Error loading bays:', error);
-                baySelect.innerHTML = '<option value="">Error loading bays</option>';
+                baySelect.innerHTML = '<option value="">-- Select Bay --</option>';
             }
         }
 
         function toggleBaySelect() {
-            const sendToHolding = document.getElementById('arrSendToHolding').checked;
-            const baySelect = document.getElementById('arrBay');
-            baySelect.disabled = sendToHolding;
-            if (sendToHolding) baySelect.value = '';
+            try {
+                const sendToHolding = document.getElementById('arrSendToHolding')?.checked || false;
+                const baySelect = document.getElementById('arrBay');
+                if (baySelect) {
+                    baySelect.disabled = sendToHolding;
+                    if (sendToHolding) baySelect.value = '';
+                }
+            } catch (err) {
+                console.error('Error in toggleBaySelect:', err);
+            }
         }
 
         function showBayDesignation() {
-            const baySelect = document.getElementById('arrBay');
-            const selected = baySelect.options[baySelect.selectedIndex];
-            const designation = selected?.dataset?.designation;
-            const hint = document.getElementById('bayDesignationHint');
-            hint.textContent = designation ? `Suggested for: ${designation}` : '';
+            try {
+                const baySelect = document.getElementById('arrBay');
+                if (!baySelect) return;
+                const selected = baySelect.options[baySelect.selectedIndex];
+                const designation = selected?.dataset?.designation;
+                const hint = document.getElementById('bayDesignationHint');
+                if (hint) {
+                    hint.textContent = designation ? `Suggested for: ${designation}` : '';
+                }
+            } catch (err) {
+                console.error('Error in showBayDesignation:', err);
+            }
         }
 
         function onArrivalTrunkSelect() {
-            const id = document.getElementById('arrTrunkSelect').value;
-            if (!id) return;
-            
-            const movement = movements.find(m => m.id == id);
-            if (!movement) return;
-            
-            // Auto-select hub based on destination
-            const destHub = document.getElementById('arrDestHub');
-            const destination = (movement.destination || '').toUpperCase();
-            
-            if (destination.includes('NUNEATON') && destination.includes('HUB 1')) {
-                destHub.value = 'NUNEATON HUB 1';
-            } else if (destination.includes('NUNEATON') && destination.includes('HUB 2')) {
-                destHub.value = 'NUNEATON HUB 2';
-            } else if (destination.includes('NUNEATON')) {
-                destHub.value = 'NUNEATON HUB 1';
-            }
-            
-            if (destHub.value) loadAvailableBays();
-            
-            // Auto-fill trailer if available
-            if (movement.trailer) {
-                document.getElementById('arrTrailer').value = movement.trailer;
+            try {
+                const id = document.getElementById('arrTrunkSelect')?.value;
+                if (!id) return;
+                
+                const movement = movements.find(m => m.id == id);
+                if (!movement) return;
+                
+                // Auto-select hub based on destination
+                const destHub = document.getElementById('arrDestHub');
+                if (!destHub) return;
+                
+                const destination = (movement.destination || '').toUpperCase();
+                
+                if (destination.includes('NUNEATON') && destination.includes('HUB 1')) {
+                    destHub.value = 'NUNEATON HUB 1';
+                } else if (destination.includes('NUNEATON') && destination.includes('HUB 2')) {
+                    destHub.value = 'NUNEATON HUB 2';
+                } else if (destination.includes('NUNEATON')) {
+                    destHub.value = 'NUNEATON HUB 1';
+                }
+                
+                if (destHub.value) loadAvailableBays();
+                
+                // Auto-fill trailer if available
+                const trailerInput = document.getElementById('arrTrailer');
+                if (movement.trailer && trailerInput) {
+                    trailerInput.value = movement.trailer;
+                }
+            } catch (err) {
+                console.error('Error in onArrivalTrunkSelect:', err);
             }
         }
 

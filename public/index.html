@@ -3238,6 +3238,12 @@
                 showToast('Operations updated');
                 await refreshData();
                 
+                // Also refresh yard map if it's visible
+                const yardView = document.getElementById('yardMapView');
+                if (yardView && !yardView.classList.contains('hidden')) {
+                    loadYardMap();
+                }
+                
                 document.getElementById('opsDockTime').value = '';
                 document.getElementById('opsTipStart').value = '';
                 document.getElementById('opsTipComplete').value = '';

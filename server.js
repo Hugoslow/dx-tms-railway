@@ -1325,8 +1325,44 @@ app.patch('/api/movements/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Movement not found' });
     }
     
-    // Log the action
     const movement = result.rows[0];
+    
+    // Sync with bay_assignments table if status changed to docked/tipping/complete
+    if (['docked', 'tipping', 'complete'].includes(updates.status)) {
+      try {
+        // Find active bay assignment for this movement
+        const bayAssignment = await pool.query(
+          `SELECT ba.id FROM bay_assignments ba WHERE ba.movement_id = $1 AND ba.cleared_at IS NULL`,
+          [id]
+        );
+        
+        if (bayAssignment.rows.length > 0) {
+          const assignmentId = bayAssignment.rows[0].id;
+          
+          if (updates.status === 'docked') {
+            await pool.query(
+              `UPDATE bay_assignments SET status = 'docked', docked_at = NOW(), updated_at = NOW() WHERE id = $1`,
+              [assignmentId]
+            );
+          } else if (updates.status === 'tipping') {
+            await pool.query(
+              `UPDATE bay_assignments SET status = 'tipping', tipping_started_at = NOW(), updated_at = NOW() WHERE id = $1`,
+              [assignmentId]
+            );
+          } else if (updates.status === 'complete') {
+            await pool.query(
+              `UPDATE bay_assignments SET status = 'complete', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+              [assignmentId]
+            );
+          }
+        }
+      } catch (syncErr) {
+        console.error('Error syncing bay assignment:', syncErr);
+        // Don't fail the main request if sync fails
+      }
+    }
+    
+    // Log the action
     await pool.query(
       'INSERT INTO audit_log (user_name, action, details, trunk_id) VALUES ($1, $2, $3, $4)',
       [req.user.fullName, `Status: ${movement.status}`, `${movement.trunk_id}: ${movement.origin} → ${movement.destination}`, movement.trunk_id]

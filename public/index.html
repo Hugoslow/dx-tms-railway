@@ -669,10 +669,13 @@
             <div id="view-hub-arrival" class="view-panel hidden">
                 <div id="arrivalContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-teal-50"><h3 class="font-semibold text-teal-800 flex items-center gap-2"><i data-lucide="log-in" class="w-5 h-5"></i>Log Arrival</h3></div><div class="p-4 space-y-4">
-                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="arrTrunkSelect" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="arrTrunkSelect" onchange="onArrivalTrunkSelect()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Gate Time</label><input type="time" id="arrGateTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Seal</label><input type="text" id="arrSealVerify" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase"></div>
-                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Bay</label><select id="arrBay" class="w-full px-3 py-2 border border-slate-200 rounded-lg"><option value="">-- Select --</option><option>Bay 1</option><option>Bay 2</option><option>Bay 3</option><option>Bay 4</option><option>Bay 5</option><option>Bay 6</option><option>YARD</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Trailer</label><input type="text" id="arrTrailer" class="w-full px-3 py-2 border border-slate-200 rounded-lg uppercase" placeholder="Trailer number"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Destination Hub</label><select id="arrDestHub" onchange="loadAvailableBays()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select Hub --</option><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option></select></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Assign Bay</label><select id="arrBay" onchange="showBayDesignation()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select Hub First --</option></select><p class="text-xs text-slate-500 mt-1" id="bayDesignationHint"></p></div>
+                        <div><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="arrSendToHolding" onchange="toggleBaySelect()" class="rounded border-slate-300"><span class="text-sm text-slate-600">No bay available - send to holding area</span></label></div>
                         <button onclick="logArrival()" class="w-full py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">Log Arrival</button>
                     </div></div></div>
                     <div class="lg:col-span-2"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between"><h3 class="font-semibold text-slate-800">Expected Arrivals <span class="text-slate-400 font-normal text-sm" id="expectedArrCount"></span></h3><select id="arrivalHubFilter" onchange="renderHubArrival()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">All Hubs</option></select></div><div class="table-container"><table class="w-full text-sm"><thead><tr class="bg-slate-50 border-b border-slate-200">
@@ -689,7 +692,19 @@
 
             <!-- Hub Operations View -->
             <div id="view-hub-operations" class="view-panel hidden">
-                <div id="hubopsContent" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- View Toggle -->
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex gap-2">
+                        <button onclick="showHubOpsView('list')" id="hubOpsListBtn" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-medium flex items-center gap-2"><i data-lucide="list" class="w-4 h-4"></i>List View</button>
+                        <button onclick="showHubOpsView('yardmap')" id="hubOpsYardBtn" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium flex items-center gap-2"><i data-lucide="layout-grid" class="w-4 h-4"></i>Yard Map</button>
+                    </div>
+                    <div id="yardMapHubSelector" class="hidden">
+                        <select id="yardMapHub" onchange="loadYardMap()" class="px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="NUNEATON HUB 1">Nuneaton Hub 1</option><option value="NUNEATON HUB 2">Nuneaton Hub 2</option></select>
+                    </div>
+                </div>
+                
+                <!-- List View (existing) -->
+                <div id="hubOpsListView" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1"><div class="bg-white rounded-xl border border-slate-200 shadow-sm"><div class="px-4 py-3 border-b border-slate-200 bg-purple-50"><h3 class="font-semibold text-purple-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-5 h-5"></i>Update Operations</h3></div><div class="p-4 space-y-4">
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Trunk</label><select id="opsTrunkSelect" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"><option value="">-- Select --</option></select></div>
                         <div><label class="block text-sm font-medium text-slate-700 mb-1">Dock Time</label><input type="time" id="opsDockTime" class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
@@ -706,6 +721,39 @@
                         <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Arrived</th>
                         <th class="px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase bg-slate-50">Status</th>
                     </tr></thead><tbody id="dockedTrailersBody"></tbody></table></div></div></div>
+                </div>
+                
+                <!-- Yard Map View -->
+                <div id="yardMapView" class="hidden">
+                    <!-- Stats Bar -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-green-600" id="yardStatAvailable">0</div><div class="text-xs text-slate-500">Available</div></div>
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-amber-500" id="yardStatAllocated">0</div><div class="text-xs text-slate-500">Allocated</div></div>
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-orange-500" id="yardStatDocked">0</div><div class="text-xs text-slate-500">Docked</div></div>
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-red-500" id="yardStatTipping">0</div><div class="text-xs text-slate-500">Tipping</div></div>
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-emerald-500" id="yardStatComplete">0</div><div class="text-xs text-slate-500">Complete</div></div>
+                        <div class="bg-white rounded-lg border p-4 text-center"><div class="text-2xl font-bold text-blue-500" id="yardStatHolding">0</div><div class="text-xs text-slate-500">In Holding</div></div>
+                    </div>
+                    
+                    <!-- Map and Holding Area -->
+                    <div class="flex gap-6 flex-col lg:flex-row">
+                        <div class="flex-1 bg-white rounded-xl border p-6" id="yardMapContainer">
+                            <p class="text-slate-400 text-center">Loading yard map...</p>
+                        </div>
+                        <div class="w-full lg:w-64 bg-white rounded-xl border p-4">
+                            <h3 class="font-semibold text-slate-800 mb-3 flex items-center justify-between">🅿️ Holding Area<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full" id="holdingCount">0</span></h3>
+                            <div id="holdingAreaList" class="space-y-2 max-h-96 overflow-y-auto"><p class="text-sm text-slate-400 text-center py-4">No trailers waiting</p></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Legend -->
+                    <div class="flex gap-4 mt-4 p-3 bg-white rounded-lg border justify-center flex-wrap text-sm">
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-green-400 border border-green-500"></span>Available</div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-amber-300 border border-amber-500"></span>Allocated</div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-orange-300 border border-orange-500"></span>Docked</div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-red-400 border border-red-500"></span>Tipping</div>
+                        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-emerald-300 border border-emerald-500"></span>Complete</div>
+                    </div>
                 </div>
             </div>
 
@@ -3098,21 +3146,63 @@
             const id = document.getElementById('arrTrunkSelect').value;
             if (!id) { showToast('Select trunk', 'error'); return; }
             
+            const gateTime = document.getElementById('arrGateTime').value;
+            if (!gateTime) { showToast('Enter gate time', 'error'); return; }
+            
+            const destHub = document.getElementById('arrDestHub').value;
+            const bayId = document.getElementById('arrBay').value;
+            const sendToHolding = document.getElementById('arrSendToHolding').checked;
+            const trailer = document.getElementById('arrTrailer')?.value || '';
+            const seal = document.getElementById('arrSealVerify')?.value || '';
+            
+            if (!destHub) { showToast('Select destination hub', 'error'); return; }
+            if (!bayId && !sendToHolding) { showToast('Select a bay or send to holding', 'error'); return; }
+            
             try {
+                // 1. Update movement with gate arrival
                 await api(`/movements/${id}`, {
                     method: 'PATCH',
                     body: {
                         status: 'arrived',
-                        gate_arrival: document.getElementById('arrGateTime').value,
-                        bay: document.getElementById('arrBay').value
+                        gate_arrival: gateTime,
+                        trailer: trailer,
+                        seal: seal
                     }
                 });
                 
-                showToast('Arrival logged');
+                // 2. Either allocate bay or add to holding
+                if (sendToHolding) {
+                    await api('/yard/holding', {
+                        method: 'POST',
+                        body: {
+                            hub: destHub,
+                            movement_id: parseInt(id),
+                            trailer: trailer,
+                            notes: 'Added at gate arrival'
+                        }
+                    });
+                    showToast('Arrival logged - sent to holding area');
+                } else {
+                    const allocResult = await api('/yard/allocate', {
+                        method: 'POST',
+                        body: {
+                            bay_id: parseInt(bayId),
+                            movement_id: parseInt(id),
+                            trailer: trailer
+                        }
+                    });
+                    showToast(`Arrival logged - assigned to Bay ${allocResult.bay_number}`);
+                }
+                
                 await refreshData();
                 
+                // Reset form
                 document.getElementById('arrSealVerify').value = '';
-                document.getElementById('arrBay').value = '';
+                document.getElementById('arrTrailer').value = '';
+                document.getElementById('arrDestHub').value = '';
+                document.getElementById('arrBay').innerHTML = '<option value="">-- Select Hub First --</option>';
+                document.getElementById('arrSendToHolding').checked = false;
+                document.getElementById('bayDesignationHint').textContent = '';
             } catch (err) {
                 showToast(err.message, 'error');
             }
@@ -3155,6 +3245,383 @@
                 showToast(err.message, 'error');
             }
         }
+
+        // ============ YARD MAP FUNCTIONS ============
+        let currentYardHub = 'NUNEATON HUB 1';
+        let yardMapData = { bays: [], holding: [] };
+
+        // Load available bays when hub is selected
+        async function loadAvailableBays() {
+            const hub = document.getElementById('arrDestHub').value;
+            const baySelect = document.getElementById('arrBay');
+            const sendToHolding = document.getElementById('arrSendToHolding');
+            
+            if (!hub) {
+                baySelect.innerHTML = '<option value="">-- Select Hub First --</option>';
+                return;
+            }
+            
+            try {
+                const bays = await api(`/yard/bays/${encodeURIComponent(hub)}/available`);
+                
+                if (bays.length === 0) {
+                    baySelect.innerHTML = '<option value="">No bays available</option>';
+                    sendToHolding.checked = true;
+                    toggleBaySelect();
+                    return;
+                }
+                
+                const tippingBays = bays.filter(b => b.bay_type === 'tipping');
+                const loadingBays = bays.filter(b => b.bay_type === 'loading');
+                
+                let html = '<option value="">-- Select Bay --</option>';
+                
+                if (tippingBays.length > 0) {
+                    html += '<optgroup label="Tipping Doors">';
+                    tippingBays.forEach(bay => {
+                        const designation = bay.designation ? ` (${bay.designation})` : '';
+                        html += `<option value="${bay.bay_id}" data-designation="${bay.designation || ''}">${bay.bay_number}${designation}</option>`;
+                    });
+                    html += '</optgroup>';
+                }
+                
+                if (loadingBays.length > 0) {
+                    html += '<optgroup label="Loading Bays">';
+                    loadingBays.forEach(bay => {
+                        const designation = bay.designation ? ` (${bay.designation})` : '';
+                        html += `<option value="${bay.bay_id}" data-designation="${bay.designation || ''}">${bay.bay_number}${designation}</option>`;
+                    });
+                    html += '</optgroup>';
+                }
+                
+                baySelect.innerHTML = html;
+                sendToHolding.checked = false;
+                toggleBaySelect();
+            } catch (error) {
+                console.error('Error loading bays:', error);
+                baySelect.innerHTML = '<option value="">Error loading bays</option>';
+            }
+        }
+
+        function toggleBaySelect() {
+            const sendToHolding = document.getElementById('arrSendToHolding').checked;
+            const baySelect = document.getElementById('arrBay');
+            baySelect.disabled = sendToHolding;
+            if (sendToHolding) baySelect.value = '';
+        }
+
+        function showBayDesignation() {
+            const baySelect = document.getElementById('arrBay');
+            const selected = baySelect.options[baySelect.selectedIndex];
+            const designation = selected?.dataset?.designation;
+            const hint = document.getElementById('bayDesignationHint');
+            hint.textContent = designation ? `Suggested for: ${designation}` : '';
+        }
+
+        function onArrivalTrunkSelect() {
+            const id = document.getElementById('arrTrunkSelect').value;
+            if (!id) return;
+            
+            const movement = movements.find(m => m.id == id);
+            if (!movement) return;
+            
+            // Auto-select hub based on destination
+            const destHub = document.getElementById('arrDestHub');
+            const destination = (movement.destination || '').toUpperCase();
+            
+            if (destination.includes('NUNEATON') && destination.includes('HUB 1')) {
+                destHub.value = 'NUNEATON HUB 1';
+            } else if (destination.includes('NUNEATON') && destination.includes('HUB 2')) {
+                destHub.value = 'NUNEATON HUB 2';
+            } else if (destination.includes('NUNEATON')) {
+                destHub.value = 'NUNEATON HUB 1';
+            }
+            
+            if (destHub.value) loadAvailableBays();
+            
+            // Auto-fill trailer if available
+            if (movement.trailer) {
+                document.getElementById('arrTrailer').value = movement.trailer;
+            }
+        }
+
+        // Hub Operations view toggle
+        function showHubOpsView(view) {
+            const listBtn = document.getElementById('hubOpsListBtn');
+            const yardBtn = document.getElementById('hubOpsYardBtn');
+            const listView = document.getElementById('hubOpsListView');
+            const yardView = document.getElementById('yardMapView');
+            const hubSelector = document.getElementById('yardMapHubSelector');
+            
+            if (view === 'yardmap') {
+                listBtn.classList.replace('bg-slate-800', 'bg-slate-200');
+                listBtn.classList.replace('text-white', 'text-slate-700');
+                yardBtn.classList.replace('bg-slate-200', 'bg-slate-800');
+                yardBtn.classList.replace('text-slate-700', 'text-white');
+                listView?.classList.add('hidden');
+                yardView?.classList.remove('hidden');
+                hubSelector?.classList.remove('hidden');
+                loadYardMap();
+            } else {
+                yardBtn.classList.replace('bg-slate-800', 'bg-slate-200');
+                yardBtn.classList.replace('text-white', 'text-slate-700');
+                listBtn.classList.replace('bg-slate-200', 'bg-slate-800');
+                listBtn.classList.replace('text-slate-700', 'text-white');
+                yardView?.classList.add('hidden');
+                listView?.classList.remove('hidden');
+                hubSelector?.classList.add('hidden');
+            }
+        }
+
+        async function loadYardMap() {
+            const hub = document.getElementById('yardMapHub')?.value || currentYardHub;
+            currentYardHub = hub;
+            
+            try {
+                const [bays, holding, stats] = await Promise.all([
+                    api(`/yard/bays/${encodeURIComponent(hub)}`),
+                    api(`/yard/holding/${encodeURIComponent(hub)}`),
+                    api(`/yard/stats/${encodeURIComponent(hub)}`)
+                ]);
+                
+                yardMapData = { bays, holding };
+                
+                document.getElementById('yardStatAvailable').textContent = stats.available || 0;
+                document.getElementById('yardStatAllocated').textContent = stats.allocated || 0;
+                document.getElementById('yardStatDocked').textContent = stats.docked || 0;
+                document.getElementById('yardStatTipping').textContent = stats.tipping || 0;
+                document.getElementById('yardStatComplete').textContent = stats.complete || 0;
+                document.getElementById('yardStatHolding').textContent = stats.in_holding || 0;
+                
+                renderYardMap(bays, hub);
+                renderHoldingArea(holding);
+            } catch (error) {
+                console.error('Error loading yard map:', error);
+                document.getElementById('yardMapContainer').innerHTML = '<p class="text-red-500 text-center">Failed to load yard map. Please ensure yard tables are created.</p>';
+            }
+        }
+
+        function renderYardMap(bays, hub) {
+            const container = document.getElementById('yardMapContainer');
+            
+            const topBays = bays.filter(b => b.position === 'top').sort((a, b) => a.display_order - b.display_order);
+            const bottomBays = bays.filter(b => b.position === 'bottom').sort((a, b) => a.display_order - b.display_order);
+            const sideBays = bays.filter(b => b.position === 'side').sort((a, b) => a.display_order - b.display_order);
+            
+            const isHub2 = hub.includes('HUB 2');
+            
+            let html = `
+                <div class="relative" style="padding: 20px;">
+                    <div class="text-xs text-slate-500 text-center mb-2">⬇ TIPPING DOORS</div>
+                    <div class="flex gap-1 justify-center flex-wrap mb-4">
+                        ${topBays.map(bay => renderBayBox(bay)).join('')}
+                    </div>
+                    <div class="bg-gradient-to-r from-slate-700 to-slate-800 rounded-lg p-8 text-center border-2 border-blue-500 relative">
+                        <span class="text-white font-bold text-lg tracking-wider">${hub}</span>
+                        ${isHub2 && sideBays.length > 0 ? `
+                            <div class="absolute right-0 top-1/2 transform translate-x-full -translate-y-1/2 flex flex-col gap-1 ml-4 pl-4">
+                                ${sideBays.map(bay => renderBayBox(bay)).join('')}
+                            </div>
+                            <div class="absolute right-0 top-1/2 transform translate-x-full -translate-y-1/2 ml-20 pl-16 text-xs text-slate-500" style="writing-mode: vertical-rl;">TIPPING →</div>
+                        ` : ''}
+                    </div>
+                    <div class="flex gap-1 justify-center flex-wrap mt-4">
+                        ${bottomBays.map(bay => renderBayBox(bay)).join('')}
+                    </div>
+                    <div class="text-xs text-slate-500 text-center mt-2">⬆ LOADING BAYS</div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        function renderBayBox(bay) {
+            const status = bay.current_status || 'empty';
+            const hasTrailer = bay.trailer || bay.trunk_id;
+            
+            const statusColors = {
+                'empty': 'bg-green-100 border-green-500 hover:bg-green-200',
+                'allocated': 'bg-amber-100 border-amber-500 hover:bg-amber-200',
+                'docked': 'bg-orange-100 border-orange-500 hover:bg-orange-200',
+                'tipping': 'bg-red-200 border-red-500 hover:bg-red-300 animate-pulse',
+                'complete': 'bg-emerald-100 border-emerald-500 hover:bg-emerald-200'
+            };
+            
+            return `
+                <div onclick="openBayModal(${bay.bay_id})" 
+                     class="w-12 h-14 rounded border-2 flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-110 relative ${statusColors[status] || statusColors.empty}"
+                     title="Bay ${bay.bay_number}${bay.designation ? ' (' + bay.designation + ')' : ''}">
+                    <span class="font-bold text-sm text-slate-800">${bay.bay_number}</span>
+                    ${hasTrailer ? `<span class="text-xs text-slate-600 truncate w-10 text-center">${(bay.trailer || bay.trunk_id || '').slice(-4)}</span>` : ''}
+                    ${bay.designation ? `<span class="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded text-[8px]">${bay.designation}</span>` : ''}
+                    ${status === 'tipping' ? `<span class="absolute -bottom-1 bg-red-500 text-white text-[8px] px-1 rounded">TIP</span>` : ''}
+                </div>
+            `;
+        }
+
+        function renderHoldingArea(holding) {
+            const container = document.getElementById('holdingAreaList');
+            const countBadge = document.getElementById('holdingCount');
+            
+            countBadge.textContent = holding.length;
+            
+            if (holding.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No trailers waiting</p>';
+                return;
+            }
+            
+            container.innerHTML = holding.map(item => `
+                <div class="bg-slate-50 rounded-lg p-3 border-l-4 border-blue-500">
+                    <div class="font-semibold text-sm">${item.trailer || item.trunk_id || 'Unknown'}</div>
+                    <div class="text-xs text-slate-500">${item.contractor || ''} - ${item.origin || ''}</div>
+                    <div class="text-xs text-slate-400 mt-1">Waiting: ${item.wait_minutes || 0} mins</div>
+                    <button onclick="assignFromHolding(${item.id})" class="mt-2 text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Assign to Bay</button>
+                </div>
+            `).join('');
+        }
+
+        function openBayModal(bayId) {
+            const bay = yardMapData.bays.find(b => b.bay_id === bayId);
+            if (!bay) return;
+            
+            const isOccupied = bay.current_status !== 'empty';
+            const statusLabels = { 'empty': 'Available', 'allocated': 'Allocated', 'docked': 'Docked', 'tipping': 'Tipping', 'complete': 'Complete' };
+            const statusColors = { 'empty': 'text-green-600', 'allocated': 'text-amber-600', 'docked': 'text-orange-600', 'tipping': 'text-red-600', 'complete': 'text-emerald-600' };
+            
+            let content = `
+                <h3 class="text-lg font-semibold mb-4">Bay ${bay.bay_number}</h3>
+                <div class="space-y-2 mb-4 text-sm">
+                    <div><span class="text-slate-500">Status:</span> <span class="font-medium ${statusColors[bay.current_status] || ''}">${statusLabels[bay.current_status] || bay.current_status}</span></div>
+                    ${bay.designation ? `<div><span class="text-slate-500">Suggested for:</span> <span class="font-medium">${bay.designation}</span></div>` : ''}
+                    ${isOccupied ? `
+                        <div><span class="text-slate-500">Trailer:</span> <span class="font-medium">${bay.trailer || '-'}</span></div>
+                        <div><span class="text-slate-500">Trunk:</span> <span class="font-medium">${bay.trunk_id || '-'}</span></div>
+                        <div><span class="text-slate-500">Contractor:</span> <span class="font-medium">${bay.contractor || '-'}</span></div>
+                        <div><span class="text-slate-500">Origin:</span> <span class="font-medium">${bay.origin || '-'}</span></div>
+                    ` : ''}
+                </div>
+                <div class="flex gap-2 flex-wrap">
+            `;
+            
+            if (bay.current_status === 'allocated') {
+                content += `<button onclick="updateBayStatus(${bay.assignment_id}, 'docked')" class="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm">Mark Docked</button>`;
+                content += `<button onclick="clearBay(${bay.assignment_id})" class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Clear Bay</button>`;
+            } else if (bay.current_status === 'docked') {
+                content += `<button onclick="updateBayStatus(${bay.assignment_id}, 'tipping')" class="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Start Tipping</button>`;
+                content += `<button onclick="clearBay(${bay.assignment_id})" class="px-3 py-2 bg-slate-500 text-white rounded-lg hover:bg-slate-600 text-sm">Clear Bay</button>`;
+            } else if (bay.current_status === 'tipping') {
+                content += `<button onclick="updateBayStatus(${bay.assignment_id}, 'complete')" class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">Complete Tipping</button>`;
+            } else if (bay.current_status === 'complete') {
+                content += `<button onclick="clearBay(${bay.assignment_id})" class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">Clear Bay</button>`;
+            }
+            
+            content += `<button onclick="closeBayModal()" class="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-sm">Close</button></div>`;
+            
+            // Show modal
+            let modal = document.getElementById('bayModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'bayModal';
+                modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML = `<div class="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl">${content}</div>`;
+            modal.classList.remove('hidden');
+        }
+
+        function closeBayModal() {
+            const modal = document.getElementById('bayModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function updateBayStatus(assignmentId, newStatus) {
+            try {
+                await api(`/yard/bay-status/${assignmentId}`, {
+                    method: 'PUT',
+                    body: { status: newStatus }
+                });
+                showToast(`Bay status updated to ${newStatus}`);
+                closeBayModal();
+                loadYardMap();
+                await refreshData();
+            } catch (error) {
+                showToast(error.message || 'Failed to update status', 'error');
+            }
+        }
+
+        async function clearBay(assignmentId) {
+            if (!confirm('Clear this bay?')) return;
+            try {
+                await api(`/yard/clear-bay/${assignmentId}`, { method: 'POST' });
+                showToast('Bay cleared');
+                closeBayModal();
+                loadYardMap();
+            } catch (error) {
+                showToast(error.message || 'Failed to clear bay', 'error');
+            }
+        }
+
+        async function assignFromHolding(holdingId) {
+            const hub = currentYardHub;
+            try {
+                const availableBays = await api(`/yard/bays/${encodeURIComponent(hub)}/available`);
+                
+                if (availableBays.length === 0) {
+                    showToast('No bays available', 'error');
+                    return;
+                }
+                
+                let modal = document.getElementById('bayModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'bayModal';
+                    modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+                    document.body.appendChild(modal);
+                }
+                
+                modal.innerHTML = `
+                    <div class="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl">
+                        <h3 class="text-lg font-semibold mb-4">Assign to Bay</h3>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Select Bay</label>
+                            <select id="holdingBaySelect" class="w-full px-3 py-2 border rounded-lg">
+                                ${availableBays.map(bay => `<option value="${bay.bay_id}">${bay.bay_number} - ${bay.bay_type}${bay.designation ? ' (' + bay.designation + ')' : ''}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="confirmHoldingAssignment(${holdingId})" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Assign</button>
+                            <button onclick="closeBayModal()" class="px-4 py-2 bg-slate-200 rounded-lg">Cancel</button>
+                        </div>
+                    </div>
+                `;
+                modal.classList.remove('hidden');
+            } catch (error) {
+                showToast('Failed to load available bays', 'error');
+            }
+        }
+
+        async function confirmHoldingAssignment(holdingId) {
+            const bayId = document.getElementById('holdingBaySelect').value;
+            try {
+                const result = await api(`/yard/holding/${holdingId}/assign`, {
+                    method: 'POST',
+                    body: { bay_id: parseInt(bayId) }
+                });
+                showToast(`Assigned to Bay ${result.bay_number}`);
+                closeBayModal();
+                loadYardMap();
+            } catch (error) {
+                showToast(error.message || 'Failed to assign', 'error');
+            }
+        }
+
+        // Auto-refresh yard map every 30 seconds when visible
+        setInterval(() => {
+            const yardView = document.getElementById('yardMapView');
+            if (yardView && !yardView.classList.contains('hidden')) {
+                loadYardMap();
+            }
+        }, 30000);
 
         async function cancelTrunk(id) {
             const reason = prompt('Cancellation reason:');

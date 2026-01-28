@@ -74,6 +74,135 @@ pool.query('SELECT NOW()', async (err, res) => {
     } catch (tableErr) {
       console.error('Error creating daily_reports table:', tableErr);
     }
+    
+    // Auto-create yard map tables if they don't exist
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS yard_bays (
+          id SERIAL PRIMARY KEY,
+          hub VARCHAR(50) NOT NULL,
+          bay_number INTEGER NOT NULL,
+          bay_type VARCHAR(20) NOT NULL,
+          position VARCHAR(20) NOT NULL,
+          designation VARCHAR(20),
+          is_active BOOLEAN DEFAULT true,
+          display_order INTEGER,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(hub, bay_number)
+        )
+      `);
+      
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bay_assignments (
+          id SERIAL PRIMARY KEY,
+          bay_id INTEGER REFERENCES yard_bays(id),
+          movement_id INTEGER,
+          trailer VARCHAR(50),
+          status VARCHAR(20) NOT NULL DEFAULT 'allocated',
+          allocated_at TIMESTAMP DEFAULT NOW(),
+          docked_at TIMESTAMP,
+          tipping_started_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          cleared_at TIMESTAMP,
+          allocated_by VARCHAR(100),
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS yard_holding (
+          id SERIAL PRIMARY KEY,
+          hub VARCHAR(50) NOT NULL,
+          movement_id INTEGER,
+          trailer VARCHAR(50),
+          arrived_at TIMESTAMP DEFAULT NOW(),
+          assigned_to_bay_id INTEGER REFERENCES yard_bays(id),
+          assigned_at TIMESTAMP,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      // Create indexes
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_yard_bays_hub ON yard_bays(hub)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_bay_assignments_bay ON bay_assignments(bay_id)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_bay_assignments_status ON bay_assignments(status)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_yard_holding_hub ON yard_holding(hub)`);
+      
+      // Check if bays need seeding
+      const bayCount = await pool.query('SELECT COUNT(*) FROM yard_bays');
+      if (parseInt(bayCount.rows[0].count) === 0) {
+        console.log('Seeding yard bays...');
+        
+        // Hub 1 Top Row (Tipping) - Bays 1-19
+        const hub1Top = [
+          [1,'DXBE'],[2,'DXBE'],[3,'DXBE'],[4,'DXBE'],[5,'DXBE'],[6,'DXBE'],
+          [7,null],[8,null],[9,null],[10,null],[11,null],[12,'C1'],[13,'FTS'],
+          [14,null],[15,null],[16,null],[17,'FTS'],[18,null],[19,null]
+        ];
+        for (let i = 0; i < hub1Top.length; i++) {
+          await pool.query(
+            `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+            ['NUNEATON HUB 1', hub1Top[i][0], 'tipping', 'top', hub1Top[i][1], i+1]
+          );
+        }
+        
+        // Hub 1 Bottom Row (Loading) - Bays 40-22
+        const hub1Bottom = [
+          [40,null],[39,'DXB'],[38,'FTS'],[37,'CVT'],[36,null],[35,null],[34,null],
+          [33,null],[32,null],[31,null],[30,null],[29,null],[28,null],[27,null],
+          [26,'FTS'],[25,null],[24,'Crow'],[23,'P-link'],[22,null]
+        ];
+        for (let i = 0; i < hub1Bottom.length; i++) {
+          await pool.query(
+            `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+            ['NUNEATON HUB 1', hub1Bottom[i][0], 'loading', 'bottom', hub1Bottom[i][1], i+1]
+          );
+        }
+        
+        // Hub 2 Top Row (Tipping) - Bays 1-21
+        const hub2Top = [
+          [1,null],[2,null],[3,null],[4,'KCT'],[5,'KCT'],[6,null],[7,null],
+          [8,'MTT'],[9,null],[10,null],[11,null],[12,'MTT'],[13,null],[14,null],
+          [15,null],[16,null],[17,'MTT'],[18,null],[19,null],[20,null],[21,null]
+        ];
+        for (let i = 0; i < hub2Top.length; i++) {
+          await pool.query(
+            `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+            ['NUNEATON HUB 2', hub2Top[i][0], 'tipping', 'top', hub2Top[i][1], i+1]
+          );
+        }
+        
+        // Hub 2 Side Row (Tipping) - Bays 22-27
+        for (let i = 22; i <= 27; i++) {
+          await pool.query(
+            `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+            ['NUNEATON HUB 2', i, 'tipping', 'side', null, i-21]
+          );
+        }
+        
+        // Hub 2 Bottom Row (Loading) - Bays 48-28
+        const hub2Bottom = [
+          [48,null],[47,null],[46,null],[45,null],[44,null],[43,'GKT'],[42,'DXB'],
+          [41,null],[40,'Rob'],[39,'Hand'],[38,'FF'],[37,null],[36,null],[35,'Rain'],
+          [34,null],[33,'MGC'],[32,null],[31,null],[30,null],[29,null],[28,null]
+        ];
+        for (let i = 0; i < hub2Bottom.length; i++) {
+          await pool.query(
+            `INSERT INTO yard_bays (hub, bay_number, bay_type, position, designation, display_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+            ['NUNEATON HUB 2', hub2Bottom[i][0], 'loading', 'bottom', hub2Bottom[i][1], i+1]
+          );
+        }
+        
+        console.log('Yard bays seeded successfully');
+      }
+      
+      console.log('Yard map tables ready');
+    } catch (yardErr) {
+      console.error('Error creating yard tables:', yardErr);
+    }
   }
 });
 
@@ -5677,6 +5806,388 @@ app.get('/api/schedule/contractor-codes', authenticateToken, async (req, res) =>
   } catch (err) {
     console.error('Get contractor codes error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============ YARD MAP API ENDPOINTS ============
+
+// Get all bays for a hub with current status
+app.get('/api/yard/bays/:hub', authenticateToken, async (req, res) => {
+  try {
+    const hub = decodeURIComponent(req.params.hub);
+    
+    const result = await pool.query(`
+      SELECT 
+        yb.id AS bay_id,
+        yb.hub,
+        yb.bay_number,
+        yb.bay_type,
+        yb.position,
+        yb.designation,
+        yb.is_active,
+        yb.display_order,
+        ba.id AS assignment_id,
+        ba.movement_id,
+        ba.trailer,
+        ba.status AS assignment_status,
+        ba.allocated_at,
+        ba.docked_at,
+        ba.tipping_started_at,
+        tm.trunk_id,
+        tm.contractor,
+        tm.origin,
+        CASE 
+          WHEN ba.id IS NULL THEN 'empty'
+          ELSE ba.status
+        END AS current_status
+      FROM yard_bays yb
+      LEFT JOIN bay_assignments ba ON yb.id = ba.bay_id 
+        AND ba.cleared_at IS NULL
+      LEFT JOIN trunk_movements tm ON ba.movement_id = tm.id
+      WHERE yb.hub = $1 AND yb.is_active = true
+      ORDER BY yb.position, yb.display_order
+    `, [hub]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching bays:', error);
+    res.status(500).json({ error: 'Failed to fetch bays' });
+  }
+});
+
+// Get available (empty) bays for hub - for dropdown in Hub Arrival
+app.get('/api/yard/bays/:hub/available', authenticateToken, async (req, res) => {
+  try {
+    const hub = decodeURIComponent(req.params.hub);
+    
+    const result = await pool.query(`
+      SELECT 
+        yb.id AS bay_id,
+        yb.bay_number,
+        yb.bay_type,
+        yb.designation,
+        yb.position
+      FROM yard_bays yb
+      LEFT JOIN bay_assignments ba ON yb.id = ba.bay_id 
+        AND ba.cleared_at IS NULL
+      WHERE yb.hub = $1 
+        AND yb.is_active = true 
+        AND ba.id IS NULL
+      ORDER BY yb.bay_type DESC, yb.bay_number
+    `, [hub]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching available bays:', error);
+    res.status(500).json({ error: 'Failed to fetch available bays' });
+  }
+});
+
+// Get holding area for hub
+app.get('/api/yard/holding/:hub', authenticateToken, async (req, res) => {
+  try {
+    const hub = decodeURIComponent(req.params.hub);
+    
+    const result = await pool.query(`
+      SELECT 
+        yh.id,
+        yh.hub,
+        yh.movement_id,
+        yh.trailer,
+        yh.arrived_at,
+        yh.notes,
+        tm.trunk_id,
+        tm.contractor,
+        tm.origin,
+        ROUND(EXTRACT(EPOCH FROM (NOW() - yh.arrived_at))/60) AS wait_minutes
+      FROM yard_holding yh
+      LEFT JOIN trunk_movements tm ON yh.movement_id = tm.id
+      WHERE yh.hub = $1 AND yh.assigned_to_bay_id IS NULL
+      ORDER BY yh.arrived_at
+    `, [hub]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching holding area:', error);
+    res.status(500).json({ error: 'Failed to fetch holding area' });
+  }
+});
+
+// Allocate bay (called from Hub Arrival)
+app.post('/api/yard/allocate', authenticateToken, async (req, res) => {
+  const { bay_id, movement_id, trailer } = req.body;
+  const allocated_by = req.user.fullName;
+  
+  try {
+    // Check bay is still available
+    const bayCheck = await pool.query(`
+      SELECT yb.id, yb.hub, yb.bay_number
+      FROM yard_bays yb
+      LEFT JOIN bay_assignments ba ON yb.id = ba.bay_id AND ba.cleared_at IS NULL
+      WHERE yb.id = $1 AND ba.id IS NULL
+    `, [bay_id]);
+    
+    if (bayCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Bay is no longer available' });
+    }
+    
+    // Create assignment
+    const result = await pool.query(`
+      INSERT INTO bay_assignments (bay_id, movement_id, trailer, status, allocated_by)
+      VALUES ($1, $2, $3, 'allocated', $4)
+      RETURNING *
+    `, [bay_id, movement_id, trailer, allocated_by]);
+    
+    // Update trunk_movements with bay number
+    await pool.query(`
+      UPDATE trunk_movements 
+      SET bay = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [bayCheck.rows[0].bay_number.toString(), movement_id]);
+    
+    // Log to audit
+    await pool.query(`
+      INSERT INTO audit_log (user_name, action, details, trunk_id)
+      SELECT $1, 'BAY_ALLOCATED', $2, trunk_id 
+      FROM trunk_movements WHERE id = $3
+    `, [allocated_by, `Bay ${bayCheck.rows[0].bay_number} allocated at ${bayCheck.rows[0].hub}`, movement_id]);
+    
+    res.json({ 
+      success: true, 
+      assignment: result.rows[0],
+      bay_number: bayCheck.rows[0].bay_number
+    });
+  } catch (error) {
+    console.error('Error allocating bay:', error);
+    res.status(500).json({ error: 'Failed to allocate bay' });
+  }
+});
+
+// Update bay status (Docked, Tipping, Complete)
+app.put('/api/yard/bay-status/:assignmentId', authenticateToken, async (req, res) => {
+  const { assignmentId } = req.params;
+  const { status } = req.body;
+  const updated_by = req.user.fullName;
+  
+  try {
+    let updateQuery = '';
+    
+    switch (status) {
+      case 'docked':
+        updateQuery = `UPDATE bay_assignments SET status = 'docked', docked_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`;
+        break;
+      case 'tipping':
+        updateQuery = `UPDATE bay_assignments SET status = 'tipping', tipping_started_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`;
+        break;
+      case 'complete':
+        updateQuery = `UPDATE bay_assignments SET status = 'complete', completed_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`;
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid status' });
+    }
+    
+    const result = await pool.query(updateQuery, [assignmentId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    
+    const assignment = result.rows[0];
+    
+    // Update trunk_movements with corresponding timestamp
+    const timeField = status === 'docked' ? 'dock_time' : status === 'tipping' ? 'tip_start' : 'tip_complete';
+    const timeValue = new Date().toTimeString().slice(0, 5);
+    
+    // Also update movement status
+    const movementStatus = status === 'complete' ? 'complete' : status;
+    
+    await pool.query(`
+      UPDATE trunk_movements 
+      SET ${timeField} = $1, status = $2, updated_at = NOW()
+      WHERE id = $3
+    `, [timeValue, movementStatus, assignment.movement_id]);
+    
+    // Log to audit
+    await pool.query(`
+      INSERT INTO audit_log (user_name, action, details, trunk_id)
+      SELECT $1, 'BAY_STATUS_UPDATE', $2, trunk_id 
+      FROM trunk_movements WHERE id = $3
+    `, [updated_by, `Bay status changed to ${status}`, assignment.movement_id]);
+    
+    res.json({ success: true, assignment: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating bay status:', error);
+    res.status(500).json({ error: 'Failed to update bay status' });
+  }
+});
+
+// Clear bay
+app.post('/api/yard/clear-bay/:assignmentId', authenticateToken, async (req, res) => {
+  const { assignmentId } = req.params;
+  const cleared_by = req.user.fullName;
+  
+  try {
+    const result = await pool.query(`
+      UPDATE bay_assignments 
+      SET cleared_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `, [assignmentId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    
+    // Log to audit
+    await pool.query(`
+      INSERT INTO audit_log (user_name, action, details, trunk_id)
+      SELECT $1, 'BAY_CLEARED', 'Bay cleared', trunk_id 
+      FROM trunk_movements WHERE id = $2
+    `, [cleared_by, result.rows[0].movement_id]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error clearing bay:', error);
+    res.status(500).json({ error: 'Failed to clear bay' });
+  }
+});
+
+// Add to holding area
+app.post('/api/yard/holding', authenticateToken, async (req, res) => {
+  const { hub, movement_id, trailer, notes } = req.body;
+  
+  try {
+    const result = await pool.query(`
+      INSERT INTO yard_holding (hub, movement_id, trailer, notes)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [hub, movement_id, trailer, notes]);
+    
+    res.json({ success: true, holding: result.rows[0] });
+  } catch (error) {
+    console.error('Error adding to holding:', error);
+    res.status(500).json({ error: 'Failed to add to holding area' });
+  }
+});
+
+// Move from holding to bay
+app.post('/api/yard/holding/:holdingId/assign', authenticateToken, async (req, res) => {
+  const { holdingId } = req.params;
+  const { bay_id } = req.body;
+  const assigned_by = req.user.fullName;
+  
+  try {
+    // Get holding record
+    const holdingResult = await pool.query(`
+      SELECT * FROM yard_holding WHERE id = $1 AND assigned_to_bay_id IS NULL
+    `, [holdingId]);
+    
+    if (holdingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Holding record not found or already assigned' });
+    }
+    
+    const holding = holdingResult.rows[0];
+    
+    // Check bay is available
+    const bayCheck = await pool.query(`
+      SELECT yb.id, yb.hub, yb.bay_number
+      FROM yard_bays yb
+      LEFT JOIN bay_assignments ba ON yb.id = ba.bay_id AND ba.cleared_at IS NULL
+      WHERE yb.id = $1 AND ba.id IS NULL
+    `, [bay_id]);
+    
+    if (bayCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Bay is no longer available' });
+    }
+    
+    // Create bay assignment
+    const assignResult = await pool.query(`
+      INSERT INTO bay_assignments (bay_id, movement_id, trailer, status, allocated_by)
+      VALUES ($1, $2, $3, 'allocated', $4)
+      RETURNING *
+    `, [bay_id, holding.movement_id, holding.trailer, assigned_by]);
+    
+    // Mark holding as assigned
+    await pool.query(`
+      UPDATE yard_holding 
+      SET assigned_to_bay_id = $1, assigned_at = NOW()
+      WHERE id = $2
+    `, [bay_id, holdingId]);
+    
+    // Update trunk_movements with bay number
+    if (holding.movement_id) {
+      await pool.query(`
+        UPDATE trunk_movements 
+        SET bay = $1, updated_at = NOW()
+        WHERE id = $2
+      `, [bayCheck.rows[0].bay_number.toString(), holding.movement_id]);
+    }
+    
+    // Log to audit
+    await pool.query(`
+      INSERT INTO audit_log (user_name, action, details, trunk_id)
+      SELECT $1, 'HOLDING_TO_BAY', $2, trunk_id 
+      FROM trunk_movements WHERE id = $3
+    `, [assigned_by, `Moved from holding to Bay ${bayCheck.rows[0].bay_number}`, holding.movement_id]);
+    
+    res.json({ 
+      success: true, 
+      assignment: assignResult.rows[0],
+      bay_number: bayCheck.rows[0].bay_number
+    });
+  } catch (error) {
+    console.error('Error assigning from holding:', error);
+    res.status(500).json({ error: 'Failed to assign from holding' });
+  }
+});
+
+// Get yard summary stats
+app.get('/api/yard/stats/:hub', authenticateToken, async (req, res) => {
+  try {
+    const hub = decodeURIComponent(req.params.hub);
+    
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE current_status = 'empty') AS available,
+        COUNT(*) FILTER (WHERE current_status = 'allocated') AS allocated,
+        COUNT(*) FILTER (WHERE current_status = 'docked') AS docked,
+        COUNT(*) FILTER (WHERE current_status = 'tipping') AS tipping,
+        COUNT(*) FILTER (WHERE current_status = 'complete') AS complete,
+        (SELECT COUNT(*) FROM yard_holding WHERE hub = $1 AND assigned_to_bay_id IS NULL) AS in_holding
+      FROM (
+        SELECT 
+          CASE 
+            WHEN ba.id IS NULL THEN 'empty'
+            ELSE ba.status
+          END AS current_status
+        FROM yard_bays yb
+        LEFT JOIN bay_assignments ba ON yb.id = ba.bay_id 
+          AND ba.cleared_at IS NULL
+        WHERE yb.hub = $1 AND yb.is_active = true
+      ) sub
+    `, [hub]);
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching yard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch yard stats' });
+  }
+});
+
+// Get all hubs with yard bays
+app.get('/api/yard/hubs', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT hub 
+      FROM yard_bays 
+      WHERE is_active = true 
+      ORDER BY hub
+    `);
+    
+    res.json(result.rows.map(r => r.hub));
+  } catch (error) {
+    console.error('Error fetching hubs:', error);
+    res.status(500).json({ error: 'Failed to fetch hubs' });
   }
 });
 

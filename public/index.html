@@ -3469,7 +3469,7 @@
 
         function renderBayBox(bay) {
             const status = bay.current_status || 'empty';
-            const hasTrailer = bay.trailer || bay.trunk_id;
+            const hasContent = bay.route_ref || bay.trailer;
             
             const statusColors = {
                 'empty': 'bg-green-100 border-green-500 hover:bg-green-200',
@@ -3484,7 +3484,7 @@
                      class="w-12 h-14 rounded border-2 flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-110 relative ${statusColors[status] || statusColors.empty}"
                      title="Bay ${bay.bay_number}${bay.designation ? ' (' + bay.designation + ')' : ''}">
                     <span class="font-bold text-sm text-slate-800">${bay.bay_number}</span>
-                    ${hasTrailer ? `<span class="text-xs text-slate-600 truncate w-10 text-center">${(bay.trailer || bay.trunk_id || '').slice(-4)}</span>` : ''}
+                    ${hasContent ? `<span class="text-xs text-slate-600 truncate w-10 text-center">${bay.route_ref || bay.trailer || ''}</span>` : ''}
                     ${bay.designation ? `<span class="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1 rounded text-[8px]">${bay.designation}</span>` : ''}
                     ${status === 'tipping' ? `<span class="absolute -bottom-1 bg-red-500 text-white text-[8px] px-1 rounded">TIP</span>` : ''}
                 </div>
@@ -3526,8 +3526,8 @@
                     <div><span class="text-slate-500">Status:</span> <span class="font-medium ${statusColors[bay.current_status] || ''}">${statusLabels[bay.current_status] || bay.current_status}</span></div>
                     ${bay.designation ? `<div><span class="text-slate-500">Suggested for:</span> <span class="font-medium">${bay.designation}</span></div>` : ''}
                     ${isOccupied ? `
+                        <div><span class="text-slate-500">Route Ref:</span> <span class="font-medium">${bay.route_ref || '-'}</span></div>
                         <div><span class="text-slate-500">Trailer:</span> <span class="font-medium">${bay.trailer || '-'}</span></div>
-                        <div><span class="text-slate-500">Trunk:</span> <span class="font-medium">${bay.trunk_id || '-'}</span></div>
                         <div><span class="text-slate-500">Contractor:</span> <span class="font-medium">${bay.contractor || '-'}</span></div>
                         <div><span class="text-slate-500">Origin:</span> <span class="font-medium">${bay.origin || '-'}</span></div>
                     ` : ''}

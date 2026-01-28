@@ -5870,6 +5870,7 @@ app.get('/api/yard/bays/:hub', authenticateToken, async (req, res) => {
         ba.docked_at,
         ba.tipping_started_at,
         tm.trunk_id,
+        tm.route_ref,
         tm.contractor,
         tm.origin,
         CASE 
